@@ -422,3 +422,34 @@ def test_workflow_is_dispatch_only_pinned_and_guards_the_pilot():
     assert "NOT set by this PR" in text and "ANTHROPIC_API_KEY" in text and "TOOLKIT_TOKEN" in text
     upload = [s for s in steps if "upload-artifact" in s.get("uses", "")]
     assert len(upload) == 1 and upload[0]["if"] == "always()"
+
+
+def test_run_refuses_to_start_on_rejected_credential(tmp_path, monkeypatch):
+    """A placeholder or invalid key must stop the run before the gate, with exit 2 and no run dir."""
+    from evals.agent import loop as L, runner as R
+    def boom(client=None):
+        raise L.AuthPreflightError("credential rejected")
+    monkeypatch.setattr(L, "preflight_auth", boom)
+    rc = R.main_run(["--repo", "research-replication-agent", "--model", "claude-haiku-5-5",
+                     "--trials", "1", "--budget-usd", "1", "--out", str(tmp_path)])
+    assert rc == 2
+    assert not any(p.is_dir() for p in tmp_path.iterdir()) if tmp_path.exists() else True
+
+
+def test_preflight_auth_wraps_sdk_errors():
+    import anthropic, httpx
+    from evals.agent import loop as L
+    class Bad:
+        class models:
+            @staticmethod
+            def list(limit=1):
+                raise anthropic.AuthenticationError("invalid x-api-key", response=httpx.Response(401, request=httpx.Request("GET", "https://x")), body=None)
+    with pytest.raises(L.AuthPreflightError):
+        L.preflight_auth(Bad())
+    class Good:
+        class models:
+            @staticmethod
+            def list(limit=1):
+                class P: data = [type("M", (), {"id": "claude-haiku-5-5"})()]
+                return P()
+    assert L.preflight_auth(Good()) == "claude-haiku-5-5"

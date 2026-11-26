@@ -310,6 +310,9 @@ def run_agent(repo_selector: Union[str, Sequence[Task]], *, model: str, trials: 
     lmod = _need(loop, "loop")
     gmod = _need(graders, "graders")
 
+    # 0. refuse to start on a rejected credential (free call; before the 3-minute gate)
+    lmod.preflight_auth()
+
     task_list, per_repo = _load_tasks(repo_selector, only, log)
     factory = env_factory or _env_factory(mode)
 
@@ -594,8 +597,12 @@ def main_run(argv=None) -> int:
     ap.add_argument("--budget-usd", required=True, type=float, dest="budget_usd",
                     help="run cap in USD (no default); per-trial cap = this / (tasks x trials)")
     args = ap.parse_args(argv)
-    run_agent(args.repo, model=args.model, trials=args.trials, budget_usd=args.budget_usd,
-              out_dir=Path(args.out), mode=args.mode, only=args.only)
+    try:
+        run_agent(args.repo, model=args.model, trials=args.trials, budget_usd=args.budget_usd,
+                  out_dir=Path(args.out), mode=args.mode, only=args.only)
+    except loop.AuthPreflightError as e:
+        print(f"refusing to start: {e}", file=sys.stderr)
+        return 2
     return 0
 
 

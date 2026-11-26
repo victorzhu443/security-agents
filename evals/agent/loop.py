@@ -494,6 +494,27 @@ def _client():
     return anthropic.Anthropic()
 
 
+class AuthPreflightError(RuntimeError):
+    """The credential the SDK resolved is rejected; nothing has been spent."""
+
+
+def preflight_auth(client=None) -> str:
+    """One free call (models.list) before any task runs. The first pilot burned through 18
+    tasks reporting `api: AuthenticationError` each and exited 0 because the credential was a
+    placeholder string; a run must refuse to start instead. Returns the first model id seen."""
+    import anthropic
+    c = client or _client()
+    try:
+        page = c.models.list(limit=1)
+    except anthropic.AuthenticationError as e:
+        raise AuthPreflightError(
+            "credential rejected by the API (invalid or placeholder key); set ANTHROPIC_API_KEY "
+            "or an `ant auth login` profile and retry — nothing was spent") from e
+    except anthropic.APIConnectionError as e:
+        raise AuthPreflightError(f"cannot reach the API: {type(e).__name__}") from e
+    return page.data[0].id if getattr(page, "data", None) else ""
+
+
 def _api_error_type():
     try:
         import anthropic
