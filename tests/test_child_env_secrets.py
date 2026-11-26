@@ -5,7 +5,8 @@ import stat
 import pytest
 
 from secprim.child_env import child_env, assert_no_secrets, DEFAULT_ALLOW
-from secprim.secrets import MissingSecret, require_secret, write_private
+from secprim.secrets import (MissingSecret, require_secret, write_private,
+                             is_dev, is_production)
 
 
 def test_child_env_is_built_from_allow_list_only():
@@ -34,16 +35,39 @@ def test_assert_no_secrets_catches_credential_like_keys():
     assert_no_secrets({k: "v" for k in DEFAULT_ALLOW})
 
 
-def test_require_secret_dev_default_only_outside_production():
-    assert require_secret("K", env={"K": "real"}) == "real"
-    assert require_secret("K", dev_default="dev", env={}) == "dev"
-    assert require_secret("K", dev_default="dev", env={"APP_ENV": "test"}) == "dev"
+def test_require_secret_returns_real_value_in_any_env():
+    for label in ("", "dev", "staging", "production"):
+        assert require_secret("K", dev_default="dev", env={"K": "real", "APP_ENV": label}) == "real"
+
+
+@pytest.mark.parametrize("label", ["", "dev", "development", "test", "testing", "local",
+                                   "DEV", " Test ", "LOCAL"])
+def test_require_secret_dev_default_only_for_dev_labels(label):
+    assert require_secret("K", dev_default="dev", env={"APP_ENV": label}) == "dev"
+    assert require_secret("K", dev_default="dev", env={}) == "dev"  # unset == dev
+
+
+@pytest.mark.parametrize("label", ["production", "prod", "PRODUCTION",
+                                   # the fail-closed set: anything not explicitly dev/test
+                                   "staging", "stage", "qa", "uat", "preprod", "prd", "live",
+                                   "produciton", "canary", "blue"])
+def test_require_secret_fails_closed_on_every_non_dev_label(label):
     with pytest.raises(MissingSecret):
-        require_secret("K", dev_default="dev", env={"APP_ENV": "production"})
+        require_secret("K", dev_default="dev", env={"APP_ENV": label})
+
+
+def test_require_secret_without_default_raises_even_in_dev():
     with pytest.raises(MissingSecret):
-        require_secret("K", dev_default="dev", env={"APP_ENV": "prod"})
-    with pytest.raises(MissingSecret):
-        require_secret("K", env={})  # no default, even in dev
+        require_secret("K", env={})
+
+
+def test_is_dev_and_is_production_are_not_complements():
+    # unset -> dev
+    assert is_dev(env={}) and not is_production(env={})
+    # staging is NEITHER: not dev (no defaults, no DEBUG) and not prod
+    assert not is_dev(env={"APP_ENV": "staging"}) and not is_production(env={"APP_ENV": "staging"})
+    # production is prod and not dev
+    assert is_production(env={"APP_ENV": "production"}) and not is_dev(env={"APP_ENV": "production"})
 
 
 def test_write_private_is_owner_only_and_atomic(tmp_path):
