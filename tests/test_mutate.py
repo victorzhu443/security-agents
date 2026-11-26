@@ -139,14 +139,42 @@ def test_red_baseline_aborts(tiny_repo, tmp_path):
     assert rc == 2 and not out.exists()
 
 
+def _fake_venv(repo: Path) -> Path:
+    """A gitignored-style `.venv/bin/python` that runs this test's interpreter."""
+    fake = repo / ".venv" / "bin"
+    fake.mkdir(parents=True)
+    py = fake / "python"
+    py.write_text(f'#!/bin/sh\nexec "{sys.executable}" "$@"\n')
+    py.chmod(0o755)
+    return py
+
+
 def test_relative_interpreter_resolves_against_the_target_repo(tiny_repo):
     # venvs are gitignored: `.venv/bin/python` only exists in the main tree
-    fake = tiny_repo / ".venv" / "bin"
-    fake.mkdir(parents=True)
-    (fake / "python").symlink_to(sys.executable)
+    _fake_venv(tiny_repo)
     argv = mutate.resolve_command(".venv/bin/python -m pytest tests", tiny_repo)
-    assert argv[0] == str((tiny_repo / ".venv" / "bin" / "python").resolve())
+    assert argv[0] == os.path.abspath(tiny_repo / ".venv" / "bin" / "python")   # not the symlink target
     assert argv[1:] == ["-m", "pytest", "tests"]
+
+
+def test_linked_worktree_resolves_interpreter_and_name_from_main_checkout(tiny_repo, tmp_path):
+    _fake_venv(tiny_repo)
+    linked = tmp_path / "linked-wt"
+    _git(tiny_repo, "worktree", "add", "--detach", "-q", str(linked), "HEAD")
+    try:
+        assert mutate.main_checkout(linked).resolve() == tiny_repo.resolve()
+        argv = mutate.resolve_command(".venv/bin/python -m pytest", linked)
+        assert argv[0] == os.path.abspath(tiny_repo / ".venv" / "bin" / "python")
+        with pytest.raises(FileNotFoundError):
+            mutate.resolve_command("./nope/python -m pytest", linked)
+        (linked / "security").mkdir()
+        spec_path = _write(linked, _spec([KILLED], test=".venv/bin/python -m pytest tests -q -x -p no:cacheprovider"))
+        _git(linked, "add", "-A"); _git(linked, "commit", "-qm", "spec")
+        out = tmp_path / "r.json"
+        assert mutate.main(["--repo", str(linked), "--mutations", str(spec_path), "--out", str(out), "--quiet"]) == 0
+        assert json.loads(out.read_text())["repo"] == tiny_repo.name
+    finally:
+        _git(tiny_repo, "worktree", "remove", "--force", str(linked))
 
 
 def test_spec_validation(tmp_path):

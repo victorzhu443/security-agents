@@ -1,0 +1,244 @@
+{
+ "repo": "smart-dispatch",
+ "repo_path": "/private/tmp/claude-501/-Users-vzhu-Developer-school/a23a2f00-5217-4a74-9c39-188efbc721ca/scratchpad/wt-smart-dispatch",
+ "head": "3e8b35acfda88ac65313f4811cbf3e1d283cb73e",
+ "mutations_file": "/private/tmp/claude-501/-Users-vzhu-Developer-school/a23a2f00-5217-4a74-9c39-188efbc721ca/scratchpad/wt-smart-dispatch/security/mutations.yaml",
+ "generated": "2026-11-26T09:22:13.931046+00:00",
+ "baseline": {
+  "exit_code": 0,
+  "passed": true,
+  "timed_out": false,
+  "seconds": 5.9,
+  "tail": "........................................................................ [ 69%]\n...............................                                          [100%]\n=============================== warnings summary ===============================\ntests/security/test_django_proxy.py::test_malformed_parameter_is_400_and_never_forwarded[/api/forecast?marginal_cost=nan]\n  /Users/vzhu/Developer/projects/smart-dispatch/.venv-sec/lib/python3.9/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020\n    warnings.warn(\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n103 passed, 1 warning in 5.25s"
+ },
+ "summary": {
+  "P1": {
+   "mutations": 4,
+   "killed": 4,
+   "survived": 0,
+   "errors": 0,
+   "kill_rate": 1.0
+  },
+  "P2": {
+   "mutations": 2,
+   "killed": 2,
+   "survived": 0,
+   "errors": 0,
+   "kill_rate": 1.0
+  },
+  "P4": {
+   "mutations": 1,
+   "killed": 1,
+   "survived": 0,
+   "errors": 0,
+   "kill_rate": 1.0
+  },
+  "P5": {
+   "mutations": 3,
+   "killed": 3,
+   "survived": 0,
+   "errors": 0,
+   "kill_rate": 1.0
+  },
+  "P6": {
+   "mutations": 5,
+   "killed": 5,
+   "survived": 0,
+   "errors": 0,
+   "kill_rate": 1.0
+  },
+  "P8": {
+   "mutations": 1,
+   "killed": 1,
+   "survived": 0,
+   "errors": 0,
+   "kill_rate": 1.0
+  },
+  "P9": {
+   "mutations": 1,
+   "killed": 1,
+   "survived": 0,
+   "errors": 0,
+   "kill_rate": 1.0
+  },
+  "_overall": {
+   "mutations": 17,
+   "killed": 17,
+   "survived": 0,
+   "errors": 0,
+   "kill_rate": 1.0
+  }
+ },
+ "mutations": [
+  {
+   "id": "P1-forecast-marginal-cost-plain-float",
+   "property": "P1",
+   "result": "killed",
+   "seconds": 2.5,
+   "description": "/forecast parses marginal_cost with float() again, so nan/inf/1e999 reach the margin and emit invalid JSON",
+   "exit_code": 1,
+   "detail": "",
+   "test": ".venv-sec/bin/python -m pytest tests/security -q -x -p no:cacheprovider"
+  },
+  {
+   "id": "P1-forecast-range-hours-unbounded",
+   "property": "P1",
+   "result": "killed",
+   "seconds": 2.6,
+   "description": "/forecast/range accepts any integer for hours again (no 1..MAX_RANGE_HOURS bound, no finiteness)",
+   "exit_code": 1,
+   "detail": "",
+   "test": ".venv-sec/bin/python -m pytest tests/security -q -x -p no:cacheprovider"
+  },
+  {
+   "id": "P1-django-proxy-plain-float",
+   "property": "P1",
+   "result": "killed",
+   "seconds": 2.7,
+   "description": "Django proxy validates numeric params with float() again, so nan/inf and out-of-range hours leave the process",
+   "exit_code": 1,
+   "detail": "",
+   "test": ".venv-sec/bin/python -m pytest tests/security -q -x -p no:cacheprovider"
+  },
+  {
+   "id": "P1-django-proxy-no-param-whitelist",
+   "property": "P1",
+   "result": "killed",
+   "seconds": 2.6,
+   "description": "Django proxy forwards every query parameter upstream instead of the per-route whitelist",
+   "exit_code": 1,
+   "detail": "",
+   "test": ".venv-sec/bin/python -m pytest tests/security -q -x -p no:cacheprovider"
+  },
+  {
+   "id": "P2-zip-budget-skipped",
+   "property": "P2",
+   "result": "killed",
+   "seconds": 5.5,
+   "description": "archive members are admitted straight from infolist(): no declared-size, total or ratio check before zf.read",
+   "exit_code": 1,
+   "detail": "",
+   "test": ".venv-sec/bin/python -m pytest tests/security -q -x -p no:cacheprovider"
+  },
+  {
+   "id": "P2-fetch-body-uncapped",
+   "property": "P2",
+   "result": "killed",
+   "seconds": 2.9,
+   "description": "ERCOT listing/download bodies are read with no meaningful byte cap (the caller's cap is ignored)",
+   "exit_code": 1,
+   "detail": "",
+   "test": ".venv-sec/bin/python -m pytest tests/security -q -x -p no:cacheprovider"
+  },
+  {
+   "id": "P4-fetch-host-allowlist-dropped",
+   "property": "P4",
+   "result": "killed",
+   "seconds": 2.9,
+   "description": "ERCOT fetches are no longer pinned to ercot.com: a redirect or DNS answer elsewhere is followed",
+   "exit_code": 1,
+   "detail": "",
+   "test": ".venv-sec/bin/python -m pytest tests/security -q -x -p no:cacheprovider"
+  },
+  {
+   "id": "P5-django-secret-dev-default-in-prod",
+   "property": "P5",
+   "result": "killed",
+   "seconds": 4.4,
+   "description": "SECRET_KEY falls back to the dev placeholder in every environment (no fail-closed require_secret)",
+   "exit_code": 1,
+   "detail": "",
+   "test": ".venv-sec/bin/python -m pytest tests/security -q -x -p no:cacheprovider"
+  },
+  {
+   "id": "P5-django-debug-always-on",
+   "property": "P5",
+   "result": "killed",
+   "seconds": 4.1,
+   "description": "DEBUG = True regardless of APP_ENV",
+   "exit_code": 1,
+   "detail": "",
+   "test": ".venv-sec/bin/python -m pytest tests/security -q -x -p no:cacheprovider"
+  },
+  {
+   "id": "P5-forecast-api-key-dev-default-in-prod",
+   "property": "P5",
+   "result": "killed",
+   "seconds": 2.2,
+   "description": "the Flask API's bearer key falls back to the dev placeholder in production instead of refusing to start",
+   "exit_code": 1,
+   "detail": "",
+   "test": ".venv-sec/bin/python -m pytest tests/security -q -x -p no:cacheprovider"
+  },
+  {
+   "id": "P6-auth-gate-protects-nothing",
+   "property": "P6",
+   "result": "killed",
+   "seconds": 2.1,
+   "description": "the bearer gate no longer covers /forecast* (the pre-fix open API)",
+   "exit_code": 1,
+   "detail": "",
+   "test": ".venv-sec/bin/python -m pytest tests/security -q -x -p no:cacheprovider"
+  },
+  {
+   "id": "P6-token-compare-not-constant-time",
+   "property": "P6",
+   "result": "killed",
+   "seconds": 2.2,
+   "description": "bearer token compared with == instead of hmac.compare_digest (timing side channel)",
+   "exit_code": 1,
+   "detail": "",
+   "test": ".venv-sec/bin/python -m pytest tests/security -q -x -p no:cacheprovider"
+  },
+  {
+   "id": "P6-cors-wildcard",
+   "property": "P6",
+   "result": "killed",
+   "seconds": 2.1,
+   "description": "CORS(app) wildcard origin again instead of the dashboard origin",
+   "exit_code": 1,
+   "detail": "",
+   "test": ".venv-sec/bin/python -m pytest tests/security -q -x -p no:cacheprovider"
+  },
+  {
+   "id": "P6-rate-limit-no-default",
+   "property": "P6",
+   "result": "killed",
+   "seconds": 2.1,
+   "description": "no rate limit on /forecast* (empty default limits)",
+   "exit_code": 1,
+   "detail": "",
+   "test": ".venv-sec/bin/python -m pytest tests/security -q -x -p no:cacheprovider"
+  },
+  {
+   "id": "P6-rate-limit-bucket-per-unverified-token",
+   "property": "P6",
+   "result": "killed",
+   "seconds": 2.1,
+   "description": "an unverified token gets its own rate-limit bucket, so rotating wrong tokens escapes the per-address limit",
+   "exit_code": 1,
+   "detail": "",
+   "test": ".venv-sec/bin/python -m pytest tests/security -q -x -p no:cacheprovider"
+  },
+  {
+   "id": "P8-harden-untrusted-passthrough",
+   "property": "P8",
+   "result": "killed",
+   "seconds": 3.7,
+   "description": "harden_untrusted returns the retrieved text unchanged (no fence, no neutralisation)",
+   "exit_code": 1,
+   "detail": "",
+   "test": ".venv-sec/bin/python -m pytest tests/security -q -x -p no:cacheprovider"
+  },
+  {
+   "id": "P9-k8s-privilege-escalation-allowed",
+   "property": "P9",
+   "result": "killed",
+   "seconds": 3.7,
+   "description": "the forecast deployment's container allows privilege escalation again",
+   "exit_code": 1,
+   "detail": "",
+   "test": ".venv-sec/bin/python -m pytest tests/security -q -x -p no:cacheprovider"
+  }
+ ]
+}

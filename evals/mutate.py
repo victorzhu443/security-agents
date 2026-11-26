@@ -158,6 +158,18 @@ def _git(repo: Path, *args: str, check: bool = True) -> subprocess.CompletedProc
                           check=check)
 
 
+def main_checkout(repo: Path) -> Path:
+    """The primary working tree of `repo`. When `repo` is itself a linked worktree, gitignored
+    assets (the virtualenv) live in the main checkout, so commands resolve against it too."""
+    r = _git(repo, "rev-parse", "--git-common-dir", check=False)
+    if r.returncode != 0:
+        return repo
+    common = Path(r.stdout.strip())
+    if not common.is_absolute():
+        common = (repo / common).resolve()
+    return common.parent if common.name == ".git" else repo
+
+
 def add_worktree(repo: Path, parent: Path, name: str) -> Path:
     wt = parent / name
     _git(repo, "worktree", "add", "--detach", "--quiet", str(wt), "HEAD")
@@ -192,15 +204,22 @@ def apply_mutation(wt: Path, m: Mutation) -> None:
 
 def resolve_command(cmd: str, repo: Path) -> List[str]:
     """shlex-split; a relative interpreter path (`.venv/bin/python`) is resolved
-    against the target repo, since venvs are gitignored and missing in worktrees."""
+    against the target repo, then against its main checkout when the target is a
+    linked worktree, since venvs are gitignored and missing in worktrees."""
     argv = shlex.split(cmd)
     if not argv:
         raise ValueError("empty test command")
     head = argv[0]
     if ("/" in head or head.startswith(".")) and not os.path.isabs(head):
-        cand = (repo / head).resolve()
-        if cand.exists():
-            argv[0] = str(cand)
+        for base in (repo, main_checkout(repo)):
+            # abspath, not resolve(): following the venv's bin/python symlink to the
+            # base interpreter would silently drop the virtualenv.
+            cand = os.path.abspath(base / head)
+            if os.path.exists(cand):
+                argv[0] = cand
+                break
+        else:
+            raise FileNotFoundError(f"interpreter {head!r} not found under {repo} or {main_checkout(repo)}")
     return argv
 
 
@@ -334,7 +353,7 @@ def run(repo: Path, mutations_path: Path, out: Optional[Path] = None, *, strict:
         keep = set(only.split(","))
         muts = [m for m in muts if m.id in keep or m.property in keep]
     head = _git(repo, "rev-parse", "HEAD").stdout.strip()
-    repo_name = repo.name
+    repo_name = main_checkout(repo).name
 
     scratch = Path(tempfile.mkdtemp(prefix=f"mutate-{repo_name}-"))
     rows: List[Outcome] = []
@@ -343,7 +362,11 @@ def run(repo: Path, mutations_path: Path, out: Optional[Path] = None, *, strict:
         if baseline:
             if not spec.test:
                 raise MutationSpecError("baseline needs a top-level 'test' command (or pass --no-baseline)")
-            base = run_baseline(repo, spec, scratch, timeout)
+            try:
+                base = run_baseline(repo, spec, scratch, timeout)
+            except (OSError, subprocess.CalledProcessError) as e:
+                print(f"BASELINE could not run: {getattr(e, 'stderr', '') or e}", file=sys.stderr)
+                return 2
             if not base["passed"]:
                 print(f"BASELINE RED (exit {base['exit_code']}) — every mutation would look killed; aborting.\n"
                       + base["tail"], file=sys.stderr)
