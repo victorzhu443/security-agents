@@ -1,6 +1,6 @@
 # Run directories (`python -m evals run` -> results/<run_id>/) and the pointer to the
-# last one are generated every run and never committed. Phase 6 gates read the
-# summary.json of the last *tagged* run from CI artifacts, not from git.
+# last one are generated every run and never committed. The gate reads the committed
+# copy a release publishes to baselines/<label>.json (`python -m evals baseline publish`).
 results/*/
 results/latest.json
 results/*.json
