@@ -15,11 +15,18 @@ prompt-injection work tests our apps' resistance — it is not a jailbreak kit.
 ## Layout
 
 ```
+secprim/       shared security primitives the fixes are built on:
+               boundary (validate shape/path), bounded (size/xml/zip ceilings, ReDoS probe),
+               child_env (allow-listed subprocess env), secrets (require_secret, 0600 writes),
+               safe_fetch (pinned, egress-validated HTTP; closes DNS-rebinding)
 semgrep/       custom SAST rules (incl. an LLM01 prompt-sink rule) + scan.sh runner
-promptinject/  corpus + harness + defenses; measure→mitigate→verify loop
+promptinject/  corpus + harness + defenses + assemble.py (the one prompt chokepoint)
 fuzzing/       fuzz_lib.py (Hypothesis) + Atheris template; safe-degradation property
 runbooks/      burp-suite.md (web apps), metasploit-lab.md (isolated lab)
 PLAN.md        per-project × per-skill plan, with step-by-step tasks and status
+ROOT-CAUSES.md every finding across the repos → 9 root causes → a solution each
+DESIGN.md      the exhaustive system design: current state, architecture decisions,
+               per-root-cause component design, feature selection, edit manifest
 ```
 
 ## Quick start

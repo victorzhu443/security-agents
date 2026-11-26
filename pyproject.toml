@@ -11,6 +11,8 @@ dependencies = ["hypothesis>=6.100"]
 
 [project.optional-dependencies]
 sast = ["semgrep>=1.38"]
+fetch = ["httpx>=0.27"]          # secprim.safe_fetch (RC-4)
+xml = ["defusedxml>=0.7"]        # stronger backend for secprim.safe_xml_fromstring
 
 [tool.setuptools]
-packages = ["promptinject", "promptinject.corpus", "fuzzing"]
+packages = ["promptinject", "promptinject.corpus", "fuzzing", "secprim"]
