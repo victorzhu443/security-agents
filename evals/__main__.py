@@ -4,6 +4,8 @@
     python -m evals list                       # evals, case counts, graders
     python -m evals card <name> [--write]      # eval card (--all for every one)
     python -m evals build-tasks [--check]      # regenerate evals/registry/tasks.jsonl
+    python -m evals agent-validate --repo <name|all> [--only ids] [--mode auto|container|local] [--out DIR]
+    python -m evals agent-run --repo <name|all> --model <id> --trials K --budget-usd N [--only ids] [--mode ...] [--out DIR]
 """
 from __future__ import annotations
 
@@ -76,6 +78,12 @@ def main(argv=None) -> int:
         return card_main(rest)
     if cmd == "build-tasks":
         return cmd_build_tasks(rest)
+    if cmd == "agent-run":
+        from .agent.runner import main_run as agent_run_main
+        return agent_run_main(rest)
+    if cmd == "agent-validate":
+        from .agent.runner import main_validate as agent_validate_main
+        return agent_validate_main(rest)
     print(f"unknown command {cmd!r}\n\n{USAGE.strip()}", file=sys.stderr)
     return 2
 

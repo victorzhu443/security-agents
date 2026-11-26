@@ -1,0 +1,87 @@
+name: agent-evals
+# EVALS-PLAN.md Phase 7: the agent-eval harness in CI, manual trigger only.
+#
+#   validate   always: `python -m evals agent-validate --repo all --mode container` -- the
+#              no-model validity gate (noop must fail, reference must pass) over every
+#              catalogue task. Needs no key. The run dir is uploaded as an artifact.
+#   pilot      only when the `run_pilot` input is true AND the ANTHROPIC_API_KEY secret
+#              exists: one Haiku 5.5 trial per research-replication-agent task, capped at
+#              $5 -- the "harness pilot, one repo" row of the budget schedule, an allocation
+#              of the monthly total (under $200), not a separate limit.
+#
+# Secrets: `ANTHROPIC_API_KEY` and `TOOLKIT_TOKEN` are NOT set by this PR -- only the repo
+# owner can add them (Settings > Secrets). Without the key the pilot step is skipped and
+# the workflow still succeeds. Without TOOLKIT_TOKEN (read-only Contents PAT, CI-SETUP.md)
+# the private study-hub repo cannot be cloned, so its tasks are reported by the gate as
+# quarantined-by-environment, not as a failure. Secret values are never echoed: every
+# check goes through an `env:` indirection and tests only emptiness.
+on:
+  workflow_dispatch:
+    inputs:
+      run_pilot:
+        description: Run the $5 Haiku 5.5 pilot on research-replication-agent after the gate (needs ANTHROPIC_API_KEY).
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      SA_CLONE_CACHE: ${{ github.workspace }}/.sa-clones
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with: { python-version: "3.12" }
+      - run: pip install -e ".[agent]"
+
+      # Secrets cannot be read in `if:` directly, and a step's own `env:` is not visible to
+      # its `if:`, so presence is tested here (emptiness only -- the values never reach the
+      # log) and the flags are read by the steps below.
+      - name: Which secrets are configured?
+        env:
+          HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+          HAS_TOKEN: ${{ secrets.TOOLKIT_TOKEN != '' }}
+        run: |
+          echo "HAS_KEY=$HAS_KEY" >> "$GITHUB_ENV"
+          echo "HAS_TOKEN=$HAS_TOKEN" >> "$GITHUB_ENV"
+
+      # The three public repos are cloned by the harness itself from `url` in repos.yaml.
+      # study-hub is private: pre-clone it into the harness's clone cache with the token.
+      # Without the token this step is skipped and the gate reports study-hub's tasks as
+      # quarantined-by-environment (never as a failed run).
+      - name: Pre-clone the private study-hub repo (TOOLKIT_TOKEN, if present)
+        if: env.HAS_TOKEN == 'true'
+        continue-on-error: true
+        env:
+          TOOLKIT_TOKEN: ${{ secrets.TOOLKIT_TOKEN }}
+        run: |
+          mkdir -p "$SA_CLONE_CACHE"
+          git clone --quiet "https://x-access-token:${TOOLKIT_TOKEN}@github.com/victorzhu443/study-hub.git" "$SA_CLONE_CACHE/study-hub"
+          git -C "$SA_CLONE_CACHE/study-hub" remote set-url origin https://github.com/victorzhu443/study-hub.git
+
+      - name: Validity gate (no model, no key) in container mode
+        run: python -m evals agent-validate --repo all --mode container
+
+      - name: Pilot -- Haiku 5.5, research-replication-agent, 1 trial, $5 cap
+        if: ${{ inputs.run_pilot && env.HAS_KEY == 'true' }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python -m evals agent-run --repo research-replication-agent --model claude-haiku-5-5 --trials 1 --budget-usd 5 --mode container
+
+      - name: Note when the pilot was skipped
+        if: ${{ inputs.run_pilot && env.HAS_KEY != 'true' }}
+        run: echo "::warning::run_pilot was requested but ANTHROPIC_API_KEY is not set; the pilot was skipped."
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: agent-evals-run
+          path: |
+            evals/results/*/
+            evals/results/latest-agent.json
+            evals/results/latest-agent-validate.json
+          if-no-files-found: warn
