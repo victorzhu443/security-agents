@@ -116,7 +116,10 @@ class SemgrepGrader:
             return Result(False, error="semgrep not installed")
         env = {**os.environ, "PATH": f"{Path(binary).parent}{os.pathsep}{os.environ.get('PATH', '')}"}
         out = subprocess.run(
+            # --project-root: the repo's own .semgrepignore quarantines evals/cases
+            # from the repo-level scan; the grader must still see the case files.
             [binary, "scan", "--config", str(self.rules), "--metrics", "off", "--quiet",
+             "--project-root", str(case.variant_dir(variant)),
              "--json", str(case.variant_dir(variant))],
             capture_output=True, text=True, timeout=300, env=env)
         if out.returncode != 0 or not out.stdout.strip():

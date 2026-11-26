@@ -19,7 +19,8 @@ jobs:
       python-version: "3.11"
       requirements: ""
       install-cmd: pip install -e ".[fetch]"     # runtime deps only; semgrep is a CI tool, not shipped
-      source-dirs: "."
+      # Real source only: evals/cases is intentionally vulnerable (see .semgrepignore).
+      source-dirs: "secprim promptinject fuzzing evals/graders.py evals/run.py"
       tests-path: tests
       # B314: secprim.bounded.safe_xml_fromstring is the wrapper that makes
       # ElementTree safe (size ceilings, defusedxml via the `xml` extra); bandit
@@ -48,7 +49,7 @@ jobs:
         with: { python-version: "3.11" }
       - run: pip install -e ".[fetch]" semgrep==1.136.0
       - name: Run evals (recall / precision per property)
-        run: python -m evals.run --out evals/results/ci.json
+        run: python -m evals.run --strict --out evals/results/ci.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: evals-report
