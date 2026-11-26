@@ -79,3 +79,16 @@ def test_json_like_produces_the_hostile_option_shape():
     found = find(json_like(), lambda v: isinstance(v, dict) and isinstance(v.get("options"), list)
                  and any(not isinstance(o, dict) for o in v["options"]))
     assert isinstance(found["options"], list)
+
+
+def test_plugin_graders_are_discovered(tmp_path, monkeypatch):
+    import importlib, sys as _sys
+    import evals.graders as G
+    plug = Path(G.__file__).parent / "graders_zz_test_plugin.py"
+    plug.write_text("GRADERS = {'zz_probe': object()}\n")
+    try:
+        _sys.modules.pop("evals.graders_zz_test_plugin", None)
+        assert "zz_probe" in G.default_graders(REPO)
+    finally:
+        plug.unlink()
+        _sys.modules.pop("evals.graders_zz_test_plugin", None)

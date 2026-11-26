@@ -200,9 +200,23 @@ class InjectionGrader:
 
 
 def default_graders(repo_root: Path) -> Dict[str, Any]:
-    return {
+    """Built-in graders plus plugins: any `evals/graders_<family>.py` exposing a
+    `GRADERS` dict is merged in, so a property family adds its grader in its own
+    module instead of editing this file."""
+    import importlib
+    import pkgutil
+    graders: Dict[str, Any] = {
         "semgrep": SemgrepGrader(repo_root / "semgrep" / "rules.yml"),
         "fuzz": FuzzGrader(),
         "cost": CostGrader(),
         "injection": InjectionGrader(),
     }
+    for m in pkgutil.iter_modules([str(Path(__file__).parent)]):
+        if m.name.startswith("graders_"):
+            mod = importlib.import_module(f"evals.{m.name}")
+            extra = getattr(mod, "GRADERS", {})
+            dup = set(extra) & set(graders)
+            if dup:
+                raise ValueError(f"{m.name} redefines graders {sorted(dup)}")
+            graders.update(extra)
+    return graders
