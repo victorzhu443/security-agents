@@ -72,7 +72,7 @@ def assert_robust(
         except Exception as e:  # noqa: BLE001 — the point is to catch the rest
             raise AssertionError(
                 f"{parse.__name__} raised unexpected {type(e).__name__} on "
-                f"input {data[:80]!r}: {e}"
+                f"input {repr(data)[:80]}: {e}"
             ) from e
 
     return _test

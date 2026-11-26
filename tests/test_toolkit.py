@@ -50,3 +50,20 @@ def test_fuzz_lib_passes_safe_parser():
             raise ValueError("empty")
         return len(s)
     assert_robust(safe, allowed=(ValueError,), max_examples=50)()
+
+
+def test_fuzz_lib_reports_unsliceable_falsifying_input():
+    # With a structural strategy the falsifying input can be None or a dict;
+    # the failure message must still be an AssertionError naming the parser,
+    # not a TypeError from slicing the input while building the message.
+    from hypothesis import strategies as st
+
+    def bad(_):
+        raise RecursionError("boom")
+    try:
+        assert_robust(bad, allowed=(ValueError,), max_examples=5,
+                      strategy=st.none())()
+    except AssertionError as e:
+        assert "bad raised unexpected RecursionError" in str(e)
+        return
+    raise AssertionError("assert_robust should raise AssertionError, not TypeError")
