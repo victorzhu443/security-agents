@@ -1,0 +1,16 @@
+id: P2-read-before-size-check-01
+property: P2
+origin: historical-miss
+grader: refuse
+description: >
+  study-hub extract_text.xlsx_text: z.read("xl/sharedStrings.xml") ran before the
+  size check, so a 200 KB workbook declaring a 200 MB part was decompressed in full
+  (269 MB peak) and only then refused. Clean reads the member's declared size
+  first and refuses with TooLarge before a byte is decompressed. The grader counts
+  decompressed bytes, so "read everything, then raise" is also detected.
+expect:
+  target: extract:xlsx_text
+  inputs: [{kind: zip_member, member: xl/sharedStrings.xml, size: 20000000}]
+  accept: [{kind: zip_member, member: xl/sharedStrings.xml, size: 4000, fill: random}]
+  refuse: [TooLarge]
+  max_read: 5000000

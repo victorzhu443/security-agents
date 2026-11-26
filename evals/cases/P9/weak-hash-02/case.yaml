@@ -1,0 +1,10 @@
+id: P9-weak-hash-02
+property: P9
+origin: derived
+grader: semgrep
+description: >
+  hashlib.sha1 as an on-disk cache key — a non-security use that still trips
+  scanners and FIPS builds. Clean keeps the digest and states intent with
+  usedforsecurity=False.
+expect:
+  rule: weak-hash-non-crypto

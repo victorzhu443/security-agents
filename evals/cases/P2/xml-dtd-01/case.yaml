@@ -1,0 +1,14 @@
+id: P2-xml-dtd-01
+property: P2
+origin: historical-miss
+grader: refuse
+description: >
+  study-hub xlsx_text parsed sharedStrings.xml with xml.etree, which expands the
+  entities an internal DTD declares (billion laughs). Clean parses through
+  secprim.safe_xml_fromstring, which refuses any DOCTYPE/ENTITY declaration and
+  caps the document size; a plain document still parses.
+expect:
+  target: sheet:shared_strings
+  inputs: [{kind: xml_dtd}]
+  accept: [{kind: xml_plain}]
+  refuse: [MalformedInput]

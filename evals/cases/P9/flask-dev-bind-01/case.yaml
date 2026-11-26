@@ -1,0 +1,10 @@
+id: P9-flask-dev-bind-01
+property: P9
+origin: derived
+grader: semgrep
+description: >
+  Flask's development server bound to 0.0.0.0 under __main__, exposing it on every
+  interface. Clean keeps app.run() on 127.0.0.1 for local work; production is
+  served by gunicorn behind the ingress.
+expect:
+  rule: flask-dev-bind-all

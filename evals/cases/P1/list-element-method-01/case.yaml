@@ -1,0 +1,14 @@
+id: P1-list-element-method-01
+property: P1
+origin: derived
+grader: fuzz
+description: >
+  A request handler method validates the JSON body and its "fields" list but not
+  each element, so a str/int/None/list element raises an undeclared
+  AttributeError (HTTP 500). Clean routes every element through as_dict/as_str,
+  so the only failure is MalformedInput.
+expect:
+  target: intake:submit
+  strategy: json
+  allowed: [MalformedInput]
+  max_examples: 500

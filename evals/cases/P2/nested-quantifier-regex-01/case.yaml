@@ -1,0 +1,16 @@
+id: P2-nested-quantifier-regex-01
+property: P2
+origin: derived
+grader: cost
+description: >
+  A header key list matched with ^(?:\w+\s?)+: — a quantified group whose body
+  can also match the separator-less run, so letters with no terminating ":" are
+  split every possible way. Nested quantifiers are exponential, not quadratic
+  (24 letters = 0.8 s, 30 = a minute), so the probe runs at n=24; the clean
+  rewrite with a mandatory separator, ^\w+(?:\s+\w+)*\s*:, is microseconds there
+  and linear at any size.
+expect:
+  kind: regex
+  target: headers:KEY_LIST
+  n: 24
+  deadline_s: 0.1
