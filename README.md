@@ -21,7 +21,9 @@ secprim/       shared security primitives the fixes are built on:
                safe_fetch (pinned, egress-validated HTTP; closes DNS-rebinding)
 semgrep/       custom SAST rules (incl. an LLM01 prompt-sink rule) + scan.sh runner
 promptinject/  corpus + harness + defenses + assemble.py (the one prompt chokepoint)
-fuzzing/       fuzz_lib.py (Hypothesis) + Atheris template; safe-degradation property
+fuzzing/       fuzz_lib.py (Hypothesis assert_robust + size_sweep cost property),
+               atheris_harness.py + run_atheris.sh (coverage-guided; Docker fallback on macOS),
+               seeds/<target>/ corpora
 runbooks/      burp-suite.md (web apps), metasploit-lab.md (isolated lab)
 PLAN.md        per-project × per-skill plan, with step-by-step tasks and status
 ROOT-CAUSES.md every finding across the repos → 9 root causes → a solution each

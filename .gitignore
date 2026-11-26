@@ -8,3 +8,7 @@ dist/
 .hypothesis/
 results.sarif
 .venv*/
+
+# coverage-guided fuzzing: libFuzzer crash/timeout artifacts
+fuzzing/crashes/
+fuzzing/corpus/

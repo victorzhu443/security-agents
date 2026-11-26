@@ -1,5 +1,7 @@
 # Security tooling for the toolkit and the per-project integrations.
 semgrep>=1.38        # SAST: custom rules in semgrep/rules.yml + registry packs
 hypothesis>=6.100    # property-based fuzzing: fuzzing/fuzz_lib.py
-# Optional, coverage-guided fuzzing (needs clang; see fuzzing/README.md):
+# Optional, coverage-guided fuzzing: pip install atheris needs a clang that
+# ships libFuzzer (Linux). Apple Clang does not — on macOS fuzzing/run_atheris.sh
+# runs it inside fuzzing/Dockerfile.atheris instead. See fuzzing/README.md.
 #   atheris>=2.3
