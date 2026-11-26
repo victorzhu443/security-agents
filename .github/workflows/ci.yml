@@ -20,7 +20,7 @@ jobs:
       requirements: ""
       install-cmd: pip install -e ".[fetch]"     # runtime deps only; semgrep is a CI tool, not shipped
       # Real source only: evals/cases is intentionally vulnerable (see .semgrepignore).
-      source-dirs: "secprim promptinject fuzzing evals/graders.py evals/run.py"
+      source-dirs: "secprim promptinject fuzzing evals/graders.py evals/run.py evals/registry.py evals/metrics.py evals/cards.py evals/__main__.py"
       tests-path: tests
       # B314: secprim.bounded.safe_xml_fromstring is the wrapper that makes
       # ElementTree safe (size ceilings, defusedxml via the `xml` extra); bandit
@@ -37,9 +37,12 @@ jobs:
       - run: pip install -e ".[fetch]"
       - name: Prompt-injection demo (vulnerable vs hardened)
         run: python -m promptinject.harness
+      - name: evals/registry/tasks.jsonl is fresh relative to the case dirs
+        run: python -m evals build-tasks --check
 
-  # Phase 1 of EVALS-PLAN.md: run the eval corpus and publish the report. No
-  # gates yet; Phase 6 adds regression gates against the previous tag.
+  # EVALS-PLAN.md Phase 1 + 2.5: run the eval corpus in the Layer 6 layout and publish
+  # the run directory (samples.jsonl, summary.json with Wilson CIs, report.md). No
+  # gates yet; Phase 6 adds regression gates reading summary.json of the previous tag.
   evals:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -48,11 +51,15 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with: { python-version: "3.11" }
       - run: pip install -e ".[fetch]" semgrep==1.136.0
-      - name: Run evals (recall / precision per property)
-        run: python -m evals.run --strict --out evals/results/ci.json
+      - name: Run evals (recall / precision with CIs per eval)
+        run: python -m evals run --strict
+      - name: Name the run directory for the artifact
+        if: always()
+        run: echo "RUN_DIR=evals/results/$(python -c 'import json;print(json.load(open("evals/results/latest.json"))["run_id"])')" >> "$GITHUB_ENV"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
         with:
-          name: evals-report
+          name: evals-run
           path: |
-            evals/results/ci.json
-            evals/results/latest.md
+            ${{ env.RUN_DIR }}
+            evals/results/latest.json

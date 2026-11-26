@@ -1,3 +1,8 @@
+# Run directories (`python -m evals run` -> results/<run_id>/) and the pointer to the
+# last one are generated every run and never committed. Phase 6 gates read the
+# summary.json of the last *tagged* run from CI artifacts, not from git.
+results/*/
+results/latest.json
 results/*.json
 results/*.md
 !results/.gitkeep
