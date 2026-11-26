@@ -47,6 +47,7 @@ class Case:
     expect: Dict[str, Any]
     path: Path                          # directory holding case.yaml, vuln/, clean/
     description: str = ""
+    canary: str = ""                    # contamination canary (evals/registry/CANARY.txt)
 
     def variant_dir(self, variant: str) -> Path:
         return self.path / variant
@@ -100,6 +101,12 @@ def json_like():
 # ----------------------------------------------------------------- graders
 
 class SemgrepGrader:
+    """P3/P5/P8/P9 static rules. Detected = `expect.rule` fires in the variant.
+
+    Pattern-based: a fix the rule does not recognize is a precision gap (the first
+    P8 sink rule flagged `harden()` inline in an f-string), and a vulnerable shape
+    the rule has no pattern for is a recall gap — only the shapes in the corpus are
+    known covered. Needs the `semgrep` binary; errors (never passes) without it."""
     name = "semgrep"
 
     def __init__(self, rules: Path):

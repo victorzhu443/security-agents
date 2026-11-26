@@ -171,6 +171,10 @@ an AST check for timing, a canary passthrough for injection without a model). Th
 
 ### Budget schedule ($200/month of API credit)
 
+The one hard rule (Victor, 2026-11-26): total spend in a month stays under $200. The caps
+below are the allocation of that total, not separate limits; move credit between rows as
+measured costs come in, but the monthly sum does not move.
+
 | step | model | cap | cumulative |
 |---|---|---|---|
 | harness pilot, one repo | Haiku 5.5 | $5 | $5 |
@@ -198,17 +202,17 @@ task so later runs are planned from data.
 
 ## Execution plan
 
-| Phase | Deliverable (one PR each) | Acceptance | Who | Depends on |
-|---|---|---|---|---|
-| 0 | `EVALS.md`: properties catalog with oracles and thresholds (this plan, finalized) | reviewed; thresholds agreed | me + Victor | — |
-| 1 | `evals/` package: grader interface wrapping existing oracles; `run.py` emitting JSON + Markdown; CI job `evals` wired, **no gates yet** | runs green on the toolkit's own fixtures | me | 0 |
-| 2.5 | Lab-format migration: registry, `tasks.jsonl`, run-id dirs with `samples.jsonl` + `summary.json` + CIs, canary, cards, `list`/`card` CLI (Layer 6) | runs produce the Layer 6 layout; old cases unchanged | me | 2 |
-| 2 | Case corpus v1 — three agents in parallel by property family: (a) P1/P2/P9, (b) P4/P5/P6/P7, (c) P3/P8 — each writes `vuln/clean/case.yaml` sets, **historical misses first** | every historical miss is a case; runner reports recall/precision per class; clean twins all pass | 3 agents, I verify | 1 |
-| 3 | Mutation runner + `mutations.yaml` per repo for every fixed bug | kill rate 100 % on the known-bug set | 1 agent | 1 |
-| 4 | Injection: sealed held-out set; Tier B live-model runner with budget cap; utility set + grader for `job_parser` | Tier A green; Tier B report with CIs at the agreed budget; utility delta ≤ tolerance | me (sealed set), 1 agent (runner) | 1 |
-| 5 | Containment matrix in RRA (`tests/security/containment/`) + report generator | matrix generated in local + CI modes; container column populated once the image is built | RRA agent | 1 |
-| 6 | Gates + trends: thresholds from Phases 2–5 baselines, regression gates in CI, trend table | a deliberate regression (a reverted fix) fails the `evals` job | me | 2–5 |
-| 7 | Agent eval harness on the mutation catalogue (see Phase 7 section) + Haiku pilot + Sonnet baseline; P0 truthfulness scoring | validity gate passes; baseline report with pass^k and cost | me + 1 agent | 2.5, 3, 5 |
+| Phase | Deliverable (one PR each) | Acceptance | Who | Depends on | Status |
+|---|---|---|---|---|---|
+| 0 | `EVALS.md`: properties catalog with oracles and thresholds (this plan, finalized) | reviewed; thresholds agreed | me + Victor | — | done |
+| 1 | `evals/` package: grader interface wrapping existing oracles; `run.py` emitting JSON + Markdown; CI job `evals` wired, **no gates yet** | runs green on the toolkit's own fixtures | me | 0 | done |
+| 2.5 | Lab-format migration: registry, `tasks.jsonl`, run-id dirs with `samples.jsonl` + `summary.json` + CIs, canary, cards, `list`/`card` CLI (Layer 6) | runs produce the Layer 6 layout; old cases unchanged | me | 2 | **done** — `evals/registry/`, `evals/metrics.py`, `evals/cards/`, `python -m evals run\|list\|card\|build-tasks` |
+| 2 | Case corpus v1 — three agents in parallel by property family: (a) P1/P2/P9, (b) P4/P5/P6/P7, (c) P3/P8 — each writes `vuln/clean/case.yaml` sets, **historical misses first** | every historical miss is a case; runner reports recall/precision per class; clean twins all pass | 3 agents, I verify | 1 | done — 54 cases, 24 historical misses |
+| 3 | Mutation runner + `mutations.yaml` per repo for every fixed bug | kill rate 100 % on the known-bug set | 1 agent | 1 | done — `evals/mutate.py`, `evals/results/mutation-*.md` |
+| 4 | Injection: sealed held-out set; Tier B live-model runner with budget cap; utility set + grader for `job_parser` | Tier A green; Tier B report with CIs at the agreed budget; utility delta ≤ tolerance | me (sealed set), 1 agent (runner) | 1 | open |
+| 5 | Containment matrix in RRA (`tests/security/containment/`) + report generator | matrix generated in local + CI modes; container column populated once the image is built | RRA agent | 1 | open |
+| 6 | Gates + trends: thresholds from Phases 2–5 baselines, regression gates in CI, trend table | a deliberate regression (a reverted fix) fails the `evals` job | me | 2–5 | open |
+| 7 | Agent eval harness on the mutation catalogue (see Phase 7 section) + Haiku pilot + Sonnet baseline; P0 truthfulness scoring | validity gate passes; baseline report with pass^k and cost | me + 1 agent | 2.5, 3, 5 | open |
 
 Sequencing: 0 → 1 → {2, 3, 4, 5 in parallel} → 2.5 → 6 → 7.
 

@@ -59,6 +59,36 @@ python -m promptinject.harness
 
 See `PLAN.md` for the task-level breakdown and current status of each cell.
 
+## Evals
+
+`evals/` measures the toolkit instead of trusting it, in the layout the labs' eval
+suites share (registry, tasks as data, deterministic graders, per-sample records,
+Wilson CIs, pass@k / pass^k, eval cards, contamination canary). The design and the
+conventions it follows are in `EVALS-PLAN.md` (Layer 6 is the format).
+
+```
+evals/registry/<name>.yaml   9 evals, one per property: security.boundary.v1 … security.defaults.v1
+evals/registry/tasks.jsonl   every task flattened (generated; CI fails if stale)
+evals/cases/<P>/<id>/        case.yaml + vuln/ + clean/  (54 tasks, 24 historical misses)
+evals/graders*.py            the oracles; evals/metrics.py the statistics
+evals/cards/<name>.md        the eval card per property
+evals/results/<run_id>/      samples.jsonl · summary.json · report.md  (gitignored; CI artifact)
+```
+
+```bash
+python -m evals list                                   # evals, task counts, graders
+python -m evals run --strict                           # all 9 evals; exit 1 on any failed task
+python -m evals run --eval egress --trials 3           # one eval, pass@k and pass^k over trials
+python -m evals card egress                            # the eval card
+python -m evals build-tasks                            # after adding or editing a case
+```
+
+The numbers live in `evals/results/<run_id>/summary.json` (`overall` and per-eval
+blocks: `n`, `recall`, `precision`, each with `*_ci95`), pointed to by
+`evals/results/latest.json`; CI uploads the run directory as the `evals-run`
+artifact. Mutation-testing results (`evals/mutate.py`) are the
+`evals/results/mutation-*.md` tables.
+
 ## Honest scope
 
 - Semgrep, fuzzing, and the prompt-injection harness are **wired into the real

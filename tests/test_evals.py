@@ -64,13 +64,14 @@ def test_summary_math():
     assert s["_overall"]["cases"] == 3 and s["_overall"]["historical_misses"] == 1
 
 
-def test_runner_writes_json_and_markdown(tmp_path):
-    out = tmp_path / "r.json"
-    rc = main(["--out", str(out), "--only", "P1-option-node-shape-01,P8-text-sink-01"])
+def test_runner_writes_run_dir_and_latest_pointer(tmp_path):
+    rc = main(["--out", str(tmp_path), "--only", "P1-option-node-shape-01,P8-text-sink-01", "--quiet"])
     assert rc == 0
-    data = json.loads(out.read_text())
-    assert data["summary"]["_overall"]["cases"] == 2
-    assert (tmp_path / "latest.md").exists()
+    run_id = json.loads((tmp_path / "latest.json").read_text())["run_id"]
+    run_dir = tmp_path / run_id
+    data = json.loads((run_dir / "summary.json").read_text())
+    assert data["overall"]["n"] == 2 and data["overall"]["cases"] == 2
+    assert (run_dir / "samples.jsonl").exists() and (run_dir / "report.md").exists()
 
 
 def test_json_like_produces_the_hostile_option_shape():
