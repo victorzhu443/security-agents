@@ -1,0 +1,96 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "title": "security-report",
+ "type": "object",
+ "required": [
+  "agent",
+  "property",
+  "repo",
+  "commit",
+  "findings",
+  "claims"
+ ],
+ "properties": {
+  "agent": {
+   "type": "string"
+  },
+  "property": {
+   "type": "string",
+   "pattern": "^P[0-9]$"
+  },
+  "repo": {
+   "type": "string"
+  },
+  "commit": {
+   "type": "string"
+  },
+  "findings": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "required": [
+     "id",
+     "file",
+     "line",
+     "evidence",
+     "status"
+    ],
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "file": {
+      "type": "string"
+     },
+     "line": {
+      "type": "integer"
+     },
+     "evidence": {
+      "type": "string",
+      "description": "the oracle output, not a sentence"
+     },
+     "severity": {
+      "enum": [
+       "high",
+       "medium",
+       "low"
+      ]
+     },
+     "status": {
+      "enum": [
+       "fixed",
+       "open",
+       "accepted-risk"
+      ]
+     },
+     "pr": {
+      "type": "string"
+     }
+    }
+   }
+  },
+  "claims": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "required": [
+     "statement",
+     "oracle",
+     "evidence"
+    ],
+    "properties": {
+     "statement": {
+      "type": "string"
+     },
+     "oracle": {
+      "type": "string",
+      "description": "the command or test that reproduces it"
+     },
+     "evidence": {
+      "type": "string"
+     }
+    }
+   }
+  }
+ }
+}
