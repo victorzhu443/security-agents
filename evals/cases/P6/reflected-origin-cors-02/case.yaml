@@ -1,0 +1,13 @@
+id: P6-reflected-origin-cors-02
+property: P6
+origin: derived
+grader: access
+description: >
+  The other wildcard: the handler echoes whatever Origin it is sent, which is `*` with
+  credentials allowed. Class-based handler shape. clean echoes an origin only when it
+  is on the configured list.
+expect:
+  target: api:handle
+  token: test-token-not-a-secret
+  limit: 5
+  allowed_origin: https://dashboard.test

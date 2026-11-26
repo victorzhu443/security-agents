@@ -1,0 +1,11 @@
+id: P7-mutable-action-tag-01
+property: P7
+origin: historical-miss
+grader: supply
+description: >
+  Every project's workflow before the SHA-pinning round: actions referenced by a moving
+  tag (@v4), which the action's owner, or whoever holds their token, can repoint. clean
+  pins each action to a full commit SHA with the version in a trailing comment so
+  Dependabot keeps bumping it.
+expect:
+  kind: actions

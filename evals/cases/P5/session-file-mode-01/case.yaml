@@ -1,0 +1,10 @@
+id: P5-session-file-mode-01
+property: P5
+origin: historical-miss
+grader: secrets_mode
+description: >
+  study-hub: the browser storage state (cookies) was written with a plain open(), so it
+  took the process umask and landed 0644. clean writes it through write_private
+  (0600, atomic, umask-independent).
+expect:
+  target: session:write_session

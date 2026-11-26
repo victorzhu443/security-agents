@@ -1,0 +1,12 @@
+id: P7-known-vuln-pin-01
+property: P7
+origin: historical-miss
+grader: supply
+description: >
+  smart-dispatch requirements before PR #29: Flask 2.3.3, Flask-CORS 4.0.0 and
+  scikit-learn 1.3.0, all below the versions the audit demanded. clean carries the bumped
+  pins. Note the scikit-learn choice: "latest" (1.9) is CVE-clean but cannot load the
+  served joblib artefact trained under 1.6.1, so the fix is the audited version that
+  matches the artefact, with the reason written next to the pin.
+expect:
+  kind: audit

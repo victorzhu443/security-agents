@@ -1,0 +1,13 @@
+id: P5-env-fail-open-staging-01
+property: P5
+origin: historical-miss
+grader: secrets_boot
+description: >
+  toolkit PR #4: require_secret returned the dev default whenever APP_ENV was not literally
+  prod/production, so staging, qa, prd, live and typos ("prod ", "produciton") all booted on
+  the placeholder key. vuln is that predicate; clean uses require_secret, which allows a
+  default only for an explicit development/test label and fails closed otherwise.
+expect:
+  module: settings
+  secret: API_KEY
+  envs: [staging, qa, uat, prd, live, "prod ", produciton]

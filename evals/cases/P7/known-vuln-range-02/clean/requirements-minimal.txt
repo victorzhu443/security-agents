@@ -1,0 +1,5 @@
+# minimal install for the test workflow
+sqlalchemy>=2.0,<3
+scikit-learn>=1.6.1,<1.7   # must match the served artefact's sklearn_version (1.6.1)
+Flask-CORS>=6.0.5,<7
+pyyaml>=6.0

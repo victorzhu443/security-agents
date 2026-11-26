@@ -1,0 +1,13 @@
+id: P4-redirect-to-loopback-01
+property: P4
+origin: historical-miss
+grader: egress
+description: >
+  The classic SSRF guard: the start URL's host is resolved and checked, then a raw
+  client follows redirects by name, so a 302 to a loopback or private address is
+  connected to with the check already passed. clean uses safe_fetch, which
+  re-validates every hop and never auto-follows.
+expect:
+  target: fetcher:fetch_page
+  max_bytes: 1000
+  scenarios: [redirect_loopback, redirect_private]

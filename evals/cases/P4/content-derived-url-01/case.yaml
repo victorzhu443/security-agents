@@ -1,0 +1,14 @@
+id: P4-content-derived-url-01
+property: P4
+origin: historical-miss
+grader: egress
+description: >
+  study-hub sync_piazza: hrefs scraped out of a fetched resources page were downloaded
+  as-is, so a link in the page's content chose the destination. vuln follows every href
+  with a raw client; clean host-checks each href against the allow-list and downloads
+  through safe_fetch.
+expect:
+  target: resources:fetch_page
+  allowed_hosts: [origin.test]
+  max_bytes: 1000
+  scenarios: [derived_links]

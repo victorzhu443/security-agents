@@ -1,0 +1,13 @@
+id: P6-limiter-success-path-only-01
+property: P6
+origin: historical-miss
+grader: access
+description: >
+  smart-dispatch forecast API: the per-route limit ran inside the view, after the
+  before-request auth gate, so a flood of bad tokens was never counted and never 429'd.
+  Fixed with default_limits so the limiter runs in the before-request pass for every
+  request. vuln counts after the gate; clean counts before it.
+expect:
+  target: api:handle
+  token: test-token-not-a-secret
+  limit: 5

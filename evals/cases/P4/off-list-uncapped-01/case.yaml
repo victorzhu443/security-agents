@@ -1,0 +1,13 @@
+id: P4-off-list-uncapped-01
+property: P4
+origin: derived
+grader: egress
+description: >
+  A client class for one known service that accepts any URL it is handed and reads the
+  whole body: no allow-list, no byte cap. clean passes the service's allow_hosts and a
+  max_bytes to safe_fetch, so an off-list URL and an oversize body are both refused.
+expect:
+  target: service:fetch_page
+  allowed_hosts: [origin.test]
+  max_bytes: 1000
+  scenarios: [off_list, oversize]

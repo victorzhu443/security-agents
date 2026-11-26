@@ -1,0 +1,10 @@
+id: P7-known-vuln-range-02
+property: P7
+origin: derived
+grader: supply
+description: >
+  The same packages as lower-bounded ranges in a minimal requirements file: a floor below
+  the audited version admits the vulnerable release. clean raises the floor and bounds the
+  upper side to the tested minor.
+expect:
+  kind: audit
