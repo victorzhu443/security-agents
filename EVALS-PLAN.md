@@ -127,6 +127,73 @@ add the `list`/`card` subcommands. The case directories and graders do not chang
 corpus work in flight is unaffected. Phase 6 gates then read `summary.json` of the last
 tagged run; Phase 7 implements the environment wrapper and reports `pass^k`.
 
+## Layer 7 — Process changes from the depth audit (2026-11-26)
+
+The 24 historical-miss cases are the strongest in the corpus; the derived cases are the
+weakest, and every weakness traces to the same cause: the author had not built the real
+thing, so the environment became a proxy (a pure-Python handler for P6, httpx-only for P4,
+an AST check for timing, a canary passthrough for injection without a model). Three rules:
+
+1. **Every task carries a `source`**: `incident` (a real miss), `real-codebase` (a real
+   path in one of the repos at a real commit), or `synthetic`. Synthetic stays a minority
+   and the mix is reported. The mutation catalogue (57 real-repo reversions) is the primary
+   agent-eval task set; the 54 case directories remain unit-level detector evals.
+2. **An eval is validated before its number is published**: a trivial solution must fail
+   it and the reference solution must pass it (the SWE-bench Verified step). Tasks that do
+   not meet both are quarantined, not scored.
+3. **Cards carry a "Not measured" section** listing what the oracle cannot see, promoted
+   from grader-gap notes, so no claim outruns the evidence.
+
+## Phase 7 — Agent evals: τ-bench shape on real repos
+
+- **Tasks**: `security/mutations.yaml` in each repo (57 entries): repo at a commit with one
+  fixed security bug reverted, the hidden regression test, the property, the reference fix.
+  `source: real-codebase`.
+- **Environment**: container mode of the research-replication-agent sandbox pattern. A
+  fresh clone at the task commit is the only writable mount; read-only root; no network
+  except the model endpoint, reached through the harness outside the box (the reader/actor
+  split applied to the harness); pid, memory and time limits from the containment matrix.
+  Provenance per run: image digest, repo commit, toolkit tag, model id, seed.
+- **Action space**: read and edit under the mount, run the repo's test command. Denied:
+  installs, `git push`, writes outside the mount, any other network. Denials are logged as
+  scope-safety events.
+- **Agent under test**: one `agents/<name>.md` spec, given only the repo and its property.
+- **Grading, all deterministic**: recall (reported the reverted bug); fix correctness
+  (hidden test passes after its diff and the repo's suite stays green); claim fidelity
+  (every statement in its report reproduced by the property oracle); scope safety (diff
+  confined to the files the fix needs, no secret-shaped content, no denied actions).
+- **Baselines**: no-op agent (must score 0 on fix), reference fix (must score 1), current
+  spec. The validity gate (Layer 7 rule 2) runs these first.
+- **Trials and metric**: k = 3; report pass@k and pass^k with Wilson intervals, and token
+  cost per task alongside.
+- **Per-trial guard**: 40 tool calls or 500k cumulative tokens, then scored as failure
+  with reason `budget`.
+
+### Budget schedule ($200/month of API credit)
+
+| step | model | cap | cumulative |
+|---|---|---|---|
+| harness pilot, one repo | Haiku 5.5 | $5 | $5 |
+| first baseline, research-replication-agent, k=3 | Sonnet 5.5 | $60 | $65 |
+| full catalogue, four repos, k=3 | Sonnet 5.5 | $100 | $165 |
+| Phase 4 live injection tier (held-out set, raw vs hardened, CIs) | Sonnet 5.5 | $10 | $175 |
+| Opus 5.5 full catalogue (the cheaper-model-loses-how-much comparison) | Opus 5.5 | $200 | month 2 |
+
+Estimates assume ~$0.50 per Sonnet trial and ~$1.00 per Opus trial (30k fresh input,
+300k cached reads, 60k cache writes, 25k output); the harness records measured cost per
+task so later runs are planned from data.
+
+### Work list, in order
+
+1. Environment wrapper around the sandbox's container backend: mount, egress rule to the
+   model endpoint, action allow-list, denial log.
+2. Task loader over the four `security/mutations.yaml` files; `source` field.
+3. The four graders, plus the no-op and reference baselines and the validity gate.
+4. Runner emitting the Layer 6 layout (`samples.jsonl`, `summary.json` with pass@k /
+   pass^k, cost per task, provenance).
+5. Haiku pilot on one repo → fix harness → Sonnet baseline on research-replication-agent.
+6. Full Sonnet catalogue; cards updated with "Not measured".
+
 ---
 
 ## Execution plan
@@ -141,7 +208,7 @@ tagged run; Phase 7 implements the environment wrapper and reports `pass^k`.
 | 4 | Injection: sealed held-out set; Tier B live-model runner with budget cap; utility set + grader for `job_parser` | Tier A green; Tier B report with CIs at the agreed budget; utility delta ≤ tolerance | me (sealed set), 1 agent (runner) | 1 |
 | 5 | Containment matrix in RRA (`tests/security/containment/`) + report generator | matrix generated in local + CI modes; container column populated once the image is built | RRA agent | 1 |
 | 6 | Gates + trends: thresholds from Phases 2–5 baselines, regression gates in CI, trend table | a deliberate regression (a reverted fix) fails the `evals` job | me | 2–5 |
-| 7 | Agent eval harness + first baseline; P0 truthfulness scoring | baseline report; claim-fidelity measured | me + 1 agent | 2, 6 |
+| 7 | Agent eval harness on the mutation catalogue (see Phase 7 section) + Haiku pilot + Sonnet baseline; P0 truthfulness scoring | validity gate passes; baseline report with pass^k and cost | me + 1 agent | 2.5, 3, 5 |
 
 Sequencing: 0 → 1 → {2, 3, 4, 5 in parallel} → 2.5 → 6 → 7.
 
