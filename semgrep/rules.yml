@@ -1,0 +1,116 @@
+## Custom Semgrep rules for Victor's projects.
+## Run:  semgrep --config semgrep/rules.yml --config "p/python" --config "p/django" <path>
+## These complement the registry packs (p/python, p/django, p/secrets, p/owasp-top-ten);
+## they encode the project-specific risks the generic packs miss, especially the
+## LLM-app input-handling rules (LLM01) that no stock pack covers well.
+rules:
+  - id: untrusted-text-into-prompt-sink
+    languages: [python]
+    severity: WARNING
+    message: >
+      Untrusted text is interpolated into a prompt/message sent to a model. This is
+      the prompt-injection (OWASP LLM01) sink: data becomes instruction. Route the
+      value through promptinject.defense.harden() before it enters the prompt, and
+      keep task instructions in a system prompt the app controls.
+    metadata:
+      category: security
+      cwe: "CWE-74: Improper Neutralization of Special Elements"
+      owasp: "LLM01: Prompt Injection"
+    patterns:
+      # Only fire on real message/prompt construction, not logs or report strings.
+      - pattern-either:
+          - pattern: '{..., "content": f"...{$DOC}...", ...}'
+          - pattern: "{..., \"content\": f\"...{$DOC}...\", ...}"
+          - pattern: content=f"...{$DOC}..."
+          - pattern: HumanMessage(f"...{$DOC}...")
+          - pattern: HumanMessage(content=f"...{$DOC}...")
+          - pattern: $PROMPT.format(..., $K=$DOC, ...)
+      - metavariable-regex:
+          metavariable: $DOC
+          regex: (?i).*(text|content|document|page|chunk|body|source|passage|snippet|html|paper|user_input|answer|summary).*
+
+  - id: subprocess-shell-true
+    languages: [python]
+    severity: ERROR
+    message: >
+      subprocess called with shell=True. If any part of the command derives from
+      input this is command injection (CWE-78). Pass a list of args and shell=False.
+    metadata: {category: security, cwe: "CWE-78"}
+    patterns:
+      - pattern-either:
+          - pattern: subprocess.run(..., shell=True, ...)
+          - pattern: subprocess.Popen(..., shell=True, ...)
+          - pattern: subprocess.call(..., shell=True, ...)
+          - pattern: os.system(...)
+
+  - id: yaml-unsafe-load
+    languages: [python]
+    severity: ERROR
+    message: "yaml.load without SafeLoader executes arbitrary objects (CWE-502). Use yaml.safe_load."
+    metadata: {category: security, cwe: "CWE-502"}
+    patterns:
+      - pattern: yaml.load($X)
+
+  - id: pickle-load-untrusted
+    languages: [python]
+    severity: WARNING
+    message: >
+      pickle.load/loads deserializes arbitrary code (CWE-502). Safe only for data
+      you produced and trust; never for downloaded or user-supplied bytes.
+    metadata: {category: security, cwe: "CWE-502"}
+    patterns:
+      - pattern-either:
+          - pattern: pickle.load(...)
+          - pattern: pickle.loads(...)
+
+  - id: requests-verify-disabled
+    languages: [python]
+    severity: ERROR
+    message: "TLS verification disabled (verify=False) — enables MITM (CWE-295)."
+    metadata: {category: security, cwe: "CWE-295"}
+    patterns:
+      - pattern: requests.$M(..., verify=False, ...)
+
+  - id: sql-string-format
+    languages: [python]
+    severity: ERROR
+    message: "SQL built by string formatting/concatenation — SQL injection (CWE-89). Use parameters."
+    metadata: {category: security, cwe: "CWE-89"}
+    patterns:
+      - pattern-either:
+          - pattern: $CUR.execute(f"...", ...)
+          - pattern: $CUR.execute("..." % ..., ...)
+          - pattern: $CUR.execute("..." + $X, ...)
+
+  - id: eval-exec-call
+    languages: [python]
+    severity: ERROR
+    message: "eval()/exec() on a runtime value is code injection (CWE-95). Avoid."
+    metadata: {category: security, cwe: "CWE-95"}
+    patterns:
+      - pattern-either:
+          - pattern: eval(...)
+          - pattern: exec(...)
+
+  - id: django-debug-true
+    languages: [python]
+    severity: WARNING
+    message: "DEBUG = True leaks stack traces and settings in responses (CWE-489). Gate on env for prod."
+    metadata: {category: security, cwe: "CWE-489"}
+    patterns:
+      - pattern: DEBUG = True
+
+  - id: hardcoded-secret-assignment
+    languages: [python]
+    severity: ERROR
+    message: "Possible hardcoded secret. Load from env/secret store, never commit the literal."
+    metadata: {category: security, cwe: "CWE-798"}
+    patterns:
+      - pattern-either:
+          - pattern: $K = "..."
+      - metavariable-regex:
+          metavariable: $K
+          regex: (?i)(api_key|apikey|secret|password|passwd|token|private_key|aws_secret)
+      - metavariable-regex:
+          metavariable: $K
+          regex: ^(?!.*(EXAMPLE|PLACEHOLDER|os\.environ)).*$

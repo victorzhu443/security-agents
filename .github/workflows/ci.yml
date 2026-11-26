@@ -1,0 +1,30 @@
+name: security-ci
+# Runs the toolkit's own checks: SAST self-scan, prompt-injection demo, self-tests.
+# Copy the `sast` job into any project to get Semgrep on every push (point --config
+# at ../security-agents/semgrep/rules.yml plus the registry packs for its stack).
+on:
+  push:
+  pull_request:
+
+jobs:
+  sast:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install semgrep
+      - name: Semgrep (custom rules + python/secrets packs)
+        run: semgrep scan --config semgrep/rules.yml --config p/python --config p/secrets --error --metrics off .
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -e . pytest
+      - name: Prompt-injection demo (vulnerable vs hardened)
+        run: python -m promptinject.harness
+      - name: Toolkit self-tests (harness, defenses, fuzz property)
+        run: pytest tests/ -q
