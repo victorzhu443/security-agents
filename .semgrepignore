@@ -1,0 +1,3 @@
+# The eval corpus is intentionally vulnerable code (evals/cases/**/vuln/).
+# The repo-level SAST must not scan it; the eval graders scan each case dir on their own.
+evals/cases/

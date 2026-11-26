@@ -60,6 +60,8 @@ def assert_robust(
     *,
     max_examples: int = 300,
     strategy=text_like,
+    derandomize: bool = False,
+    report_multiple_bugs: bool = True,
 ):
     """Assert `parse` never raises outside `allowed` on fuzzed input.
 
@@ -70,7 +72,9 @@ def assert_robust(
 
     @settings(max_examples=max_examples,
               suppress_health_check=[HealthCheck.too_slow],
-              deadline=1000)
+              deadline=1000,
+              derandomize=derandomize,            # True: same examples every run (graders)
+              report_multiple_bugs=report_multiple_bugs)  # False: one AssertionError, never a group
     @given(data=strategy)
     def _test(data):
         try:

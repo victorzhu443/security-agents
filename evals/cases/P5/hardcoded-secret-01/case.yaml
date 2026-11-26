@@ -1,0 +1,7 @@
+id: P5-hardcoded-secret-01
+property: P5
+origin: derived
+grader: semgrep
+description: A credential literal in source; clean reads it from the environment.
+expect:
+  rule: hardcoded-secret-assignment
