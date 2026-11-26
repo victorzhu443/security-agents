@@ -148,3 +148,22 @@ def test_rule_fires_on_positive_and_not_on_negative(rule_id, tmp_path):
     pos, neg = CASES[rule_id]
     assert rule_id in _findings(pos, tmp_path / "pos"), f"{rule_id} did not fire"
     assert rule_id not in _findings(neg, tmp_path / "neg"), f"{rule_id} false positive"
+
+
+# Sibling shapes found by the Phase 2 eval corpus: each must fire, its twin must not.
+SIBLINGS = [
+    ("weak-hash-non-crypto", 'import hashlib\nk = hashlib.new("md5", b"x").hexdigest()\n',
+     'import hashlib\nk = hashlib.new("md5", b"x", usedforsecurity=False).hexdigest()\nj = hashlib.new("sha256", b"x")\n'),
+    ("flask-dev-bind-all", 'app.run("0.0.0.0", 8080)\n', 'app.run("127.0.0.1", 8080)\n'),
+    ("flask-dev-bind-all", 'app.run(host="::", port=8080)\n', 'app.run(host="::1", port=8080)\n'),
+    ("untrusted-text-into-prompt-sink",
+     'm = {"role": "user", "content": f"Source:\\n{document_text}"}\n',
+     'from promptinject.defense import harden\nm = {"role": "user", "content": f"Source:\\n{harden(document_text)}"}\n'),
+]
+
+
+@pytest.mark.parametrize("rule_id,pos,neg", SIBLINGS)
+def test_sibling_shape_fires_and_twin_is_clean(rule_id, pos, neg, tmp_path):
+    (tmp_path / "p").mkdir(); (tmp_path / "n").mkdir()
+    assert rule_id in _findings(pos, tmp_path / "p")
+    assert rule_id not in _findings(neg, tmp_path / "n")
