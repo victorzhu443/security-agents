@@ -1,0 +1,11 @@
+id: P8-missing-directive-01
+property: P8
+origin: historical-miss
+grader: directive
+description: >
+  The over-claim: a paper-reading prompt was reported hardened because the document
+  was fenced, but its hand-written system message never said what a fence means, so
+  the model had no instruction to treat fenced text as data. Clean assembles through
+  build_prompt(..., system=...), which appends the data-boundary directive.
+expect:
+  target: prompts:messages

@@ -237,3 +237,93 @@ rules:
     metadata: {category: security, cwe: "CWE-668"}
     patterns:
       - pattern: $APP.run(..., host="0.0.0.0", ...)
+
+  # --- evals phase 2 (P3/P8) ---------------------------------------------------
+  # Rules added while building the eval corpus (evals/cases/P3, P8). Each one
+  # closes a shape the corpus showed the rules above missing; fixtures live in
+  # tests/test_rules.py and the matching eval case is named in the message.
+  - id: untrusted-placeholder-bound-indirect
+    languages: [python]
+    severity: WARNING
+    message: >
+      An untrusted-looking placeholder ("$K") is bound to a raw value in a dict
+      that is then passed to a prompt bind site ($F). This is the same LLM01 sink
+      as untrusted-placeholder-bound-unhardened, one assignment removed: the
+      inputs dict is built first and invoked later, so the bind-site rule never
+      sees the key. Wrap the value where the dict is built — harden(...) /
+      harden_untrusted(...) / Untrusted(...) via build_prompt(...). Eval case:
+      P8-langchain-indirect-bind-01.
+    metadata:
+      category: security
+      cwe: "CWE-74: Improper Neutralization of Special Elements"
+      owasp: "LLM01: Prompt Injection"
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $D = {..., "$K": $V, ...}
+              ...
+              $F(..., $D, ...)
+          - pattern: |
+              $D = {..., "$K": $V, ...}
+              ...
+              $F(..., input=$D, ...)
+          - pattern: |
+              $D = {..., "$K": $V, ...}
+              ...
+              $F(**$D)
+      - metavariable-regex:
+          metavariable: $F
+          regex: (?i)^(.*\.)?(a?invoke|a?batch|a?stream|invoke_chain|invoke_with_retry|a?format|a?format_messages|a?format_prompt)$
+      - metavariable-regex:
+          metavariable: $K
+          regex: (?i).*(text|content|document|page|chunk|body|source|passage|snippet|html|paper|user_input|answer|summary|job_text|resume_text|query).*
+      - metavariable-regex:
+          metavariable: $V
+          regex: (?s)^(?!\s*["'])(?!\s*\(*\s*([\w.]+\.)?(harden|harden_untrusted|Untrusted|build_prompt)\s*\().*$
+      - focus-metavariable: $V
+
+  - id: inprocess-import-of-generated-code
+    languages: [python]
+    severity: WARNING
+    message: >
+      A module file from a work / output / generated-code location is imported or
+      run INSIDE this process (importlib exec_module / load_module / runpy). Code
+      the application did not write then runs with the orchestrator's environment,
+      credentials, cwd and network — there is no containment boundary at all
+      (RC-3). Run it in a child process through the sandbox boundary (cwd=workdir,
+      env=secprim.child_env(...), a file-based call protocol) instead. The location
+      heuristic is by name; a path variable named `path` is not flagged. Eval case:
+      P3-inprocess-import-01.
+    metadata:
+      category: security
+      cwe: "CWE-94: Improper Control of Generation of Code"
+    patterns:
+      - pattern-either:
+          # the location expression is in the call
+          - patterns:
+              - pattern-either:
+                  - pattern: |
+                      $SPEC = importlib.util.spec_from_file_location($N, $P, ...)
+                      ...
+                      $SPEC.loader.exec_module($M)
+                  - pattern: runpy.run_path($P, ...)
+                  - pattern: $L.load_module($P, ...)
+              - metavariable-regex:
+                  metavariable: $P
+                  regex: (?i).*(work|generated|pipeline|untrusted|foreign|model_code|agent|output|download|upload|scratch|tmp).*
+          # the location was assigned first (orchestrator._load_pipeline's shape)
+          - patterns:
+              - pattern-either:
+                  - pattern: |
+                      $P = $E
+                      ...
+                      $SPEC = importlib.util.spec_from_file_location($N, $P, ...)
+                      ...
+                      $SPEC.loader.exec_module($M)
+                  - pattern: |
+                      $P = $E
+                      ...
+                      runpy.run_path($P, ...)
+              - metavariable-regex:
+                  metavariable: $E
+                  regex: (?i).*(work|generated|pipeline|untrusted|foreign|model_code|agent|output|download|upload|scratch|tmp).*

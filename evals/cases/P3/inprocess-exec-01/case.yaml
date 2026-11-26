@@ -1,0 +1,11 @@
+id: P3-inprocess-exec-01
+property: P3
+origin: derived
+grader: containment
+description: >
+  Foreign code is exec()'d inside the orchestrator process with stdout captured, so
+  it shares the parent's environment, cwd, open handles and credentials. Clean runs
+  it in a child process with cwd=workdir and an allow-listed environment.
+expect:
+  target: runner:run_untrusted
+  probes: [env, cwd]

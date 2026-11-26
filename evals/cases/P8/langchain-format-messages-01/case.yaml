@@ -1,0 +1,10 @@
+id: P8-langchain-format-messages-01
+property: P8
+origin: derived
+grader: semgrep
+description: >
+  The same bind-site flaw in a second shape: a class method renders the template
+  with prompt.format_messages(resume_text=...) from an uploaded document. Clean
+  hardens the value in the keyword argument.
+expect:
+  rule: untrusted-placeholder-bound-unhardened

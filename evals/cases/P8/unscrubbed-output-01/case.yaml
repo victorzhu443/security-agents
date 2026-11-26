@@ -1,0 +1,10 @@
+id: P8-unscrubbed-output-01
+property: P8
+origin: derived
+grader: injection
+description: >
+  Input is hardened (fenced and neutralized) but the model text is returned to the
+  user unscrubbed, so a marker that an injection managed to place in the output
+  still reaches the user. Clean passes the output through scrub_output.
+expect:
+  target: sink:target

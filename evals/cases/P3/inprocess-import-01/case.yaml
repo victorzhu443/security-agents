@@ -1,0 +1,12 @@
+id: P3-inprocess-import-01
+property: P3
+origin: historical-miss
+grader: semgrep
+description: >
+  research-replication-agent orchestrator._load_pipeline before 085a175: the
+  model-authored work/pipeline.py was imported in-process (spec_from_file_location +
+  sys.path.insert + exec_module) and its functions called directly; no rule saw it.
+  Clean is the shape of Sandbox.call(): a JSON call file, a child process in workdir
+  with an allow-listed env, a JSON result back.
+expect:
+  rule: inprocess-import-of-generated-code

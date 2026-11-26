@@ -1,0 +1,10 @@
+id: P3-inprocess-exec-from-file-01
+property: P3
+origin: derived
+grader: semgrep
+description: >
+  A generated module's source is read from the work dir and exec()'d in the
+  orchestrator process. Clean runs the file in a child process with cwd=workdir and
+  an allow-listed environment and reads its result back from a JSON file.
+expect:
+  rule: eval-exec-call
