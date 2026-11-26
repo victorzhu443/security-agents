@@ -1,0 +1,14 @@
+id: P2-html-strip-quadratic-01
+property: P2
+origin: historical-miss
+grader: cost
+description: >
+  research-replication-agent intake: the tag stripper re.sub(r"<[^>]+>", ...)
+  re-scans to the end of the input from every unterminated "<", so a run of
+  openers is O(n^2) (100k "<" = 2.7 s). Clean uses <[^<>]+>, which cannot
+  straddle a tag, and removes script/style blocks with one forward scan instead
+  of an opener-to-closer regex.
+expect:
+  kind: parser
+  target: intake:html_to_text
+  deadline_s: 0.5

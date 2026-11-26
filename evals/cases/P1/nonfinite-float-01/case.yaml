@@ -1,0 +1,15 @@
+id: P1-nonfinite-float-01
+property: P1
+origin: historical-miss
+grader: refuse
+description: >
+  smart-dispatch forecast API: ?marginal_cost= went from request.args through
+  float(), which accepts "nan", "inf" and "1e999"; the NaN propagated into the
+  margin and the response serialised as invalid JSON. Clean routes the parameter
+  through secprim.finite_float with a range, so a non-finite value is a
+  MalformedInput (HTTP 422) at the boundary.
+expect:
+  target: forecast:marginal_cost
+  inputs: nonfinite
+  accept: finite_ok
+  refuse: [MalformedInput]

@@ -1,0 +1,16 @@
+id: P2-zip-no-budget-01
+property: P2
+origin: historical-miss
+grader: refuse
+description: >
+  smart-dispatch ingest_ercot_history: the annual archive's workbook was read with
+  zf.read(zf.namelist()[0]) under no per-member, total or ratio budget, so a small
+  archive declaring a huge member was decompressed in full. Clean admits members
+  through secprim.safe_zip_members, which refuses on declared size before any
+  byte is read.
+expect:
+  target: ingest:load_archive
+  inputs: [{kind: zip_member, member: rtm_prices_2025.xlsx, size: 20000000}]
+  accept: [{kind: zip_member, member: rtm_prices_2025.xlsx, size: 4000, fill: random}]
+  refuse: [TooLarge]
+  max_read: 1000000

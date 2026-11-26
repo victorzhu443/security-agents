@@ -1,0 +1,16 @@
+id: P2-html-no-cap-01
+property: P2
+origin: historical-miss
+grader: refuse
+description: >
+  research-replication-agent intake.fetch_html_as_text: the page body was taken
+  whole (response.text) and stripped to text under no byte ceiling, so a hostile
+  "paper page" of any size was buffered and parsed. Clean reads the body through
+  secprim.bounded_read under MAX_HTML_BYTES (the real fix moved the fetch to
+  safe_fetch(max_bytes=...), which applies the same primitive).
+expect:
+  target: intake:fetch_html_as_text
+  inputs: [{kind: response, size: 12000000}]
+  accept: [{kind: response, size: 20000}]
+  refuse: [TooLarge]
+  max_read: 4000000

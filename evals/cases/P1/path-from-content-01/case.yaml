@@ -1,0 +1,15 @@
+id: P1-path-from-content-01
+property: P1
+origin: historical-miss
+grader: refuse
+description: >
+  study-hub Ledger: every write resolved `self.root / relpath`, where relpath came
+  straight from upstream (a Canvas filename, a Piazza resource name, a page slug).
+  Path replaces the base when the right-hand side is absolute and `..` walks
+  upward, so a hostile name landed outside courses/<slug>/. Clean resolves every
+  destination through secprim.contained_path.
+expect:
+  target: ledger:dest_for
+  inputs: path_escape
+  accept: path_ok
+  refuse: [MalformedInput]
