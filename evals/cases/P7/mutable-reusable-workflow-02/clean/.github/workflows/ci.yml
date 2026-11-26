@@ -1,0 +1,14 @@
+name: ci
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  security:
+    uses: victorzhu443/security-agents/.github/workflows/security-reusable.yml@52eb708782abc3bb7fce6d14d439573dbfbf1753 # v0.1.1
+    with: { python-version: "3.11" }
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: ./.github/actions/setup
+      - run: pytest -q

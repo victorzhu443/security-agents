@@ -1,0 +1,11 @@
+id: P7-mutable-reusable-workflow-02
+property: P7
+origin: derived
+grader: supply
+description: >
+  The other `uses:` shape: a job that calls the toolkit's reusable workflow by branch
+  (@main), so every push to the toolkit changes what runs in this repo's CI. clean pins
+  the call to a commit SHA with the release in the comment; the steps that stay local
+  (./.github/...) are exempt.
+expect:
+  kind: actions

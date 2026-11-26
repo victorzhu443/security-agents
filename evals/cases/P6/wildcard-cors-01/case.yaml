@@ -1,0 +1,12 @@
+id: P6-wildcard-cors-01
+property: P6
+origin: derived
+grader: access
+description: >
+  CORS(app) with its default `*`: every origin may read authenticated responses.
+  clean answers only the configured dashboard origin and sends Vary: Origin.
+expect:
+  target: api:handle
+  token: test-token-not-a-secret
+  limit: 5
+  allowed_origin: https://dashboard.test

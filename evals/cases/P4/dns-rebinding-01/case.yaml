@@ -1,0 +1,13 @@
+id: P4-dns-rebinding-01
+property: P4
+origin: derived
+grader: egress
+description: >
+  Validate-then-connect-by-name: the resolver is consulted for the check and again by the
+  client for the connection, so an answer that changes between the two lookups reaches a
+  non-public address. clean connects to the exact address it validated (safe_fetch pins
+  the IP and sends the real Host/SNI).
+expect:
+  target: client:fetch_page
+  max_bytes: 1000
+  scenarios: [rebinding]

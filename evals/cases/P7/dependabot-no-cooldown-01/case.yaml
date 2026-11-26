@@ -1,0 +1,11 @@
+id: P7-dependabot-no-cooldown-01
+property: P7
+origin: historical-miss
+grader: supply
+description: >
+  Dependabot switched on with the two-line default: no cooldown, so every fresh release
+  (the ones most often yanked) was proposed the morning it shipped, ~37 PRs in the first
+  week. clean is the toolkit template: each ecosystem waits 7 days after a release and
+  groups minor/patch bumps.
+expect:
+  kind: dependabot

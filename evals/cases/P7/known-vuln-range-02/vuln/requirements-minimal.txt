@@ -1,0 +1,5 @@
+# minimal install for the test workflow
+sqlalchemy>=2.0,<3
+scikit-learn>=1.3.0
+Flask-CORS>=4.0,<7
+pyyaml>=6.0

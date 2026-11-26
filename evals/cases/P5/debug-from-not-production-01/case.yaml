@@ -1,0 +1,12 @@
+id: P5-debug-from-not-production-01
+property: P5
+origin: derived
+grader: secrets_boot
+description: >
+  smart-dispatch settings: DEBUG derived from `not is_production()`, and the secret
+  default keyed off DEBUG, so a staging box ran with DEBUG on and the development key.
+  Settings-class shape. clean derives DEBUG from is_dev() and the key from require_secret.
+expect:
+  module: settings
+  secret: SECRET_KEY
+  envs: [staging, qa, "prod "]

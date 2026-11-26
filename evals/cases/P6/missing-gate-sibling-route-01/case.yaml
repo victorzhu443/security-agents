@@ -1,0 +1,13 @@
+id: P6-missing-gate-sibling-route-01
+property: P6
+origin: derived
+grader: access
+description: >
+  The bearer gate is applied by exact path match, so a sibling route added later
+  (/forecast/export) is served without a token. clean gates by prefix inside one
+  handler so a new route cannot be born open.
+expect:
+  target: api:handle
+  token: test-token-not-a-secret
+  limit: 5
+  path: /forecast/export

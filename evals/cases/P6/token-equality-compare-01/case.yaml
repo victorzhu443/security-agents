@@ -1,0 +1,13 @@
+id: P6-token-equality-compare-01
+property: P6
+origin: historical-miss
+grader: token_compare
+description: >
+  smart-dispatch forecast API before the root-cause round: the bearer token was compared
+  with `==`, a timing side channel. clean compares bytes with hmac.compare_digest (bytes,
+  because compare_digest on str raises for non-ASCII and would turn a bad header into a
+  500). Static check; the behavioural probes run as a sanity gate.
+expect:
+  target: api:handle
+  token: test-token-not-a-secret
+  limit: 5

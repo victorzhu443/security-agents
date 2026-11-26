@@ -1,0 +1,9 @@
+id: P5-session-file-mode-02
+property: P5
+origin: derived
+grader: secrets_mode
+description: >
+  Same flaw through pathlib in a store class: Path.write_text creates the credential file
+  with the umask default. clean routes the store's save through write_private.
+expect:
+  target: store:write_session

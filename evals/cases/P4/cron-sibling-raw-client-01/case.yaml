@@ -1,0 +1,15 @@
+id: P4-cron-sibling-raw-client-01
+property: P4
+origin: historical-miss
+grader: egress
+description: >
+  smart-dispatch data_ingestion: ingest_recent was moved to safe_fetch while its cron
+  sibling ingest_ercot_history kept a raw client with follow_redirects on, and the
+  sibling is the one the nightly job calls. vuln keeps both functions in one module
+  with the entry point routed to the raw one; clean routes both through the shared
+  _fetch helper over safe_fetch with the ERCOT allow-list.
+expect:
+  target: ingest:fetch_page
+  allowed_hosts: [origin.test]
+  max_bytes: 1000
+  scenarios: [redirect_private, redirect_loopback, oversize]
