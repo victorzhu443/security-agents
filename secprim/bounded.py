@@ -110,16 +110,18 @@ def redos_probe(pattern: "re.Pattern[str] | str", *, n: int = 10_000,
                 deadline_s: float = 0.1,
                 probes: Optional[Iterable[Tuple[str, str]]] = None
                 ) -> List[Tuple[str, float]]:
-    """Time `pattern` against adversarial runs; raise if any exceeds the deadline.
+    r"""Time `pattern` against adversarial runs; raise if any exceeds the deadline.
 
     A healthy pattern finishes a 10k-char run in well under 100 ms. Catastrophic
     backtracking shows up as seconds. Use in a repo's security suite over every
     regex that sees untrusted text.
 
     Two things make it safe to point at an unknown pattern:
-    - sizes escalate geometrically (8, 12, 18, ... n) and the probe stops at the
-      first size over the deadline or growing faster than ~x8 per x1.5 step, so an
-      exponential pattern is caught at ~20 chars instead of hanging the suite;
+    - sizes escalate geometrically (8, 11, 14, ... n) and the probe stops at the
+      first size over the deadline, or at one growing faster than x4 per x1.25 step
+      once it costs more than deadline/50 (exponent > 6: nothing polynomial a parser
+      should have), so an exponential pattern is caught at ~20 chars instead of
+      hanging the suite;
     - every unit is also probed as "run + one foreign character" (the `+tail`
       rows), the shape that makes `^(\w+\s?)*$`-style patterns blow up only when
       the match fails at the very end.
@@ -130,7 +132,7 @@ def redos_probe(pattern: "re.Pattern[str] | str", *, n: int = 10_000,
     size = 8
     while size < n:
         sizes.append(size)
-        size = int(size * 1.5) + 1
+        size = int(size * 1.25) + 1
     sizes.append(n)
     results: List[Tuple[str, float]] = []
     for name, unit in (probes or _DEFAULT_PROBES):
@@ -147,10 +149,10 @@ def redos_probe(pattern: "re.Pattern[str] | str", *, n: int = 10_000,
                     raise AssertionError(
                         f"ReDoS: {rx.pattern!r} took {dt:.3f}s on {sz} x {name}{variant} "
                         f"(limit {deadline_s}s)")
-                if prev > 1e-3 and dt > 8 * prev:
+                if prev > 0 and dt > deadline_s / 50 and dt > 4 * prev:
                     raise AssertionError(
                         f"ReDoS: {rx.pattern!r} grew {dt/prev:.0f}x from {prev:.4f}s to {dt:.4f}s "
-                        f"between sizes on {name}{variant} (super-polynomial)")
+                        f"over one x1.25 size step on {name}{variant} (super-polynomial)")
                 prev = dt
             results.append((name + variant, dt))
     return results
