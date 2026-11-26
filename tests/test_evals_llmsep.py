@@ -94,11 +94,6 @@ SEMGREP = shutil.which("semgrep") or shutil.which("semgrep", path=os.path.expand
 
 
 @pytest.mark.skipif(SEMGREP is None, reason="semgrep not installed")
-@pytest.mark.xfail(strict=True, reason=(
-    "untrusted-text-into-prompt-sink matches the NAME inside the f-string expression, so the "
-    "idiomatic fix harden(document_text) inline still fires: the rule flags the fixed code. "
-    "Fix belongs in that rule's $DOC regex (same negative lookahead the bind-site rule uses "
-    "for $V); when it lands this test XPASSes and the marker comes off."))
 def test_sink_rule_clears_harden_inline_in_fstring(tmp_path):
     f = tmp_path / "s.py"
     f.write_text('from promptinject.defense import harden\n'

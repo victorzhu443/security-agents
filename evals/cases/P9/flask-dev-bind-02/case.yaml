@@ -1,0 +1,7 @@
+id: P9-flask-dev-bind-02
+property: P9
+origin: derived
+grader: semgrep
+description: Flask dev server bound to all interfaces via a positional host; clean binds loopback. Sibling shape the rule missed (found by corpus agent A).
+expect:
+  rule: flask-dev-bind-all

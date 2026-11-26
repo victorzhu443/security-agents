@@ -26,7 +26,9 @@ rules:
           - pattern: $PROMPT.format(..., $K=$DOC, ...)
       - metavariable-regex:
           metavariable: $DOC
-          regex: (?i).*(text|content|document|page|chunk|body|source|passage|snippet|html|paper|user_input|answer|summary).*
+          # $DOC is the whole f-string expression; a value already routed through
+          # a hardening call is the fix, not the finding.
+          regex: '(?i)^(?!.*\b(?:harden|harden_untrusted|neutralize|spotlight|untrusted|scrub_output)\s*\().*(text|content|document|page|chunk|body|source|passage|snippet|html|paper|user_input|answer|summary).*'
 
   # ---- LLM01 via templated prompts (LangChain) --------------------------------
   # The rule above sees the string being built. A LangChain template separates
@@ -210,11 +212,15 @@ rules:
       scanners); if it is new, use hashlib.sha256. Never use these for signatures.
     metadata: {category: security, cwe: "CWE-328"}
     patterns:
-      - pattern: hashlib.$H(...)
-      - metavariable-regex:
-          metavariable: $H
-          regex: ^(sha1|md5)$
+      - pattern-either:
+          - patterns:
+              - pattern: hashlib.$H(...)
+              - metavariable-regex:
+                  metavariable: $H
+                  regex: ^(sha1|md5)$
+          - pattern: hashlib.new("=~/^(?i)(sha1|md5)$/", ...)
       - pattern-not: hashlib.$H(..., usedforsecurity=False, ...)
+      - pattern-not: hashlib.new(..., usedforsecurity=False, ...)
 
   - id: torch-load-unsafe
     languages: [python]
@@ -235,8 +241,9 @@ rules:
       Flask's development server bound to 0.0.0.0. Serve production behind
       gunicorn/an ingress; keep app.run() for local development on 127.0.0.1.
     metadata: {category: security, cwe: "CWE-668"}
-    patterns:
-      - pattern: $APP.run(..., host="0.0.0.0", ...)
+    pattern-either:
+      - pattern: $APP.run(..., host="=~/^(0\.0\.0\.0|::)$/", ...)
+      - pattern: $APP.run("=~/^(0\.0\.0\.0|::)$/", ...)
 
   # --- evals phase 2 (P3/P8) ---------------------------------------------------
   # Rules added while building the eval corpus (evals/cases/P3, P8). Each one

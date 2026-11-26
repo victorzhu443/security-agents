@@ -1,0 +1,7 @@
+id: P9-weak-hash-03
+property: P9
+origin: derived
+grader: semgrep
+description: md5 via hashlib.new for an auth token; clean uses sha256. Sibling shape the rule missed (found by corpus agent A).
+expect:
+  rule: weak-hash-non-crypto
