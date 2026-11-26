@@ -20,6 +20,11 @@ points to, so rules and package never drift from the pin.
 
 The reusable workflow has to exist at the ref the callers pin. `v0.1.0` predates it.
 
+Cut `v0.1.1` **after PRs #1–#4 have all merged**, not after this one alone: PR #4
+makes `secprim.secrets.require_secret` fail closed, and callers that adopt `is_dev()`
+need that behaviour in the same tag they pin for the workflow. One tag, one bump in
+every repo (section 4 has the convergence note).
+
 ```bash
 cd ~/Developer/projects/security-agents
 git checkout main && git pull
@@ -71,8 +76,15 @@ gh secret set TOOLKIT_TOKEN -R victorzhu443/<repo>     # prompts; paste the toke
 or *repo Settings* → *Secrets and variables* → *Actions* → *New repository secret*,
 name `TOOLKIT_TOKEN`.
 
-A repo whose workflow already names the secret `GH_PAT` can keep that name: the
-caller maps it with `TOOLKIT_TOKEN: ${{ secrets.GH_PAT }}`.
+**Where the four repos stand (convergence note).** Their `security.yml` drafts
+already use the secret name `TOOLKIT_TOKEN` (renamed from `GH_PAT` in the same fix
+round as this note), run the three jobs *inline*, and pin the toolkit at `@v0.1.0`.
+Converging on `templates/security.yml` is a two-step move per repo: (a) replace the
+inline jobs with the 12-line caller at `@v0.1.1`, and (b) in the same commit bump
+the `security-agents@v0.1.0` pin in `requirements.txt` / `pyproject.toml` to
+`@v0.1.1`, so the installed package and the workflow name the same commit. Neither
+step happens before `v0.1.1` exists (section 1). A caller that still names the secret
+differently maps it: `TOOLKIT_TOKEN: ${{ secrets.<OLD_NAME> }}`.
 
 ## 5. Per project repo: drop in the two files
 
@@ -96,7 +108,19 @@ Then fill `with:` in `security.yml`. Inputs (all optional):
 | `audit-ignore` | `"audit-ignore.toml"` | accepted-risk list (section 6) |
 
 Secret: `TOOLKIT_TOKEN`. In `dependabot.yml`, delete the `npm` block in a repo with
-no `package.json`, or point its `directory` at the frontend folder.
+no `package.json`, or point its `directory` at the frontend folder. Keep the group
+form the template uses, in every ecosystem block:
+
+```yaml
+groups:
+  <ecosystem>-minor-patch:
+    patterns: ["*"]
+    update-types: [minor, patch]
+```
+
+`patterns: ["*"]` puts every package in the group; `update-types` limits the group to
+minor and patch bumps, so majors arrive as their own PRs and the test suite gates each
+one alone. A group without `update-types` would fold majors in with the rest.
 
 Starting points per repo, matching what each repo's draft `security.yml` does today:
 
@@ -105,7 +129,7 @@ Starting points per repo, matching what each repo's draft `security.yml` does to
 | research-replication-agent (uv, 3.12) | `python-version: "3.12"`, `requirements: ""`, `install-cmd: pip install uv && uv export --frozen --no-hashes --no-emit-project -o requirements-lock.txt && pip install -r requirements-lock.txt -e .`, `tests-env: REPLICATOR_SANDBOX_BACKEND=local`, `source-dirs: replicator` |
 | smart-dispatch (Django) | `requirements: requirements.txt`, `install-cmd: pip install -r requirements_minimal.txt Django sqlalchemy hypothesis`, `semgrep-extra-configs: "p/django p/owasp-top-ten p/kubernetes"`; move the `--ignore-vuln` ids into `audit-ignore.toml` with `expires = 2026-12-31` |
 | study-hub | `requirements: requirements.txt`, `tests-path: tests` |
-| firstplay-backend | `requirements:` its requirements file, `semgrep-extra-configs: "p/owasp-top-ten"` plus the framework pack |
+| firstplay-backend (3.11 in CI and prod; `requires-python` says 3.9 but nothing runs there) | `python-version: "3.11"`, `requirements: requirements.txt`, `install-cmd: pip install -r requirements.txt -r requirements-dev.txt` (the tests need `pytest-asyncio` and `reportlab` from the dev file; `sca` still audits `requirements.txt` alone), `semgrep-extra-configs: "p/owasp-top-ten"` plus the framework pack |
 
 Commit, push, and watch the first run (`gh run watch -R victorzhu443/<repo>`). Three
 jobs appear under `security /`: `security-tests`, `sast`, `sca`. Any finding fails;

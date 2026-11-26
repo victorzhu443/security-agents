@@ -173,7 +173,8 @@ jobs:
         with:
           python-version: ${{ inputs.python-version }}
 
-      - run: python -m pip install --upgrade pip && python -m pip install semgrep bandit
+      # Exact pins so Dependabot (pip ecosystem) can track them; bump here, not in callers.
+      - run: python -m pip install --upgrade pip && python -m pip install semgrep==1.136.0 bandit==1.8.6
 
       - name: Semgrep (toolkit rules + python/secrets packs + extras; any finding fails)
         env:
@@ -213,11 +214,23 @@ jobs:
         with:
           python-version: ${{ inputs.python-version }}
 
-      - name: Install pip-audit in its own venv (so its dependencies are never audited as the project's)
+      # pip-audit lives in its own venv and is only ever called by absolute path. Its bin dir is
+      # NOT added to GITHUB_PATH (that prepends, and every later `python`/`pip` in the job
+      # would silently resolve to the audit venv, installing the project into it and auditing
+      # pip-audit's own dependency tree as the project's).
+      - name: Install pip-audit in its own venv
         run: |
           python -m venv "$RUNNER_TEMP/audit"
           "$RUNNER_TEMP/audit/bin/pip" install --quiet --upgrade pip pip-audit
-          echo "$RUNNER_TEMP/audit/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/audit/bin/pip-audit" --version
+
+      - name: Guard - the project interpreter is setup-python's, not the audit venv's
+        run: |
+          echo "python: $(command -v python) ($(python --version 2>&1))"
+          echo "pip-audit: $RUNNER_TEMP/audit/bin/pip-audit"
+          case "$(command -v python)" in
+            "$RUNNER_TEMP"/*) echo "::error::python resolves inside the audit venv; the project would be audited against the wrong environment"; exit 1 ;;
+          esac
 
       - name: Let pip clone the private toolkit (install-cmd may need it)
         env: { TOKEN: "${{ secrets.TOOLKIT_TOKEN }}" }
@@ -243,6 +256,7 @@ jobs:
             python -m pip install --upgrade pip
             bash -euo pipefail -c "$CMD"
             OUT="$RUNNER_TEMP/audit-frozen.txt"
+            echo "frozen from: $(command -v python) ($(python --version 2>&1)), $(python -m pip --version)"
             python -m pip freeze --exclude-editable | grep -v -E "$FILTER" > "$OUT" || true
             echo "mode=frozen" >> "$GITHUB_OUTPUT"
           else
@@ -295,4 +309,5 @@ jobs:
           IGNORES: ${{ steps.ignores.outputs.args }}
         run: |
           if [ "$MODE" = "frozen" ]; then NODEPS="--no-deps"; else NODEPS=""; fi
-          pip-audit --strict --progress-spinner off $NODEPS -r "$FILE" $IGNORES
+          echo "mode=$MODE file=$FILE ($(wc -l < "$FILE") lines)"
+          "$RUNNER_TEMP/audit/bin/pip-audit" --strict --progress-spinner off $NODEPS -r "$FILE" $IGNORES

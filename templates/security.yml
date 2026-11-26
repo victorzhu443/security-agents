@@ -21,4 +21,4 @@ jobs:
       # bandit-skips: ""                      # e.g. "B314", with the reason in a comment here
       # audit-ignore: audit-ignore.toml       # accepted risks, each with an expiry
     secrets:
-      TOOLKIT_TOKEN: ${{ secrets.TOOLKIT_TOKEN }}   # or ${{ secrets.GH_PAT }} where that name is already set
+      TOOLKIT_TOKEN: ${{ secrets.TOOLKIT_TOKEN }}   # the name all four repos use; see CI-SETUP.md §4
