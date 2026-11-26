@@ -5,6 +5,8 @@ name: security (reusable)
 #   sast             Semgrep (toolkit rules + p/python + p/secrets + extras; ERROR/WARNING fail,
 #                    INFO is printed as review aid) and bandit -ll
 #   sca              pip-audit --strict, with accepted risks in audit-ignore.toml (each one expires)
+#   mutation-gate    opt-in (`mutations: true`): every mutation in the caller's
+#                    security/mutations.yaml must turn its security tests red (kill rate 100 %)
 #
 # A project repo calls it from its own .github/workflows/security.yml (see templates/security.yml):
 #
@@ -79,6 +81,14 @@ on:
         description: Path to the accepted-risk list for pip-audit (see templates/audit-ignore.toml). Absent file = no ignores.
         type: string
         default: "audit-ignore.toml"
+      mutations:
+        description: >-
+          Run the mutation-gate job: `python -m evals.mutate --repo . --strict` against the
+          repo's security/mutations.yaml (schema in the toolkit's evals/mutate.py). Every
+          mutation must be killed; a survivor or an error fails the job. Skips, green, when
+          the file is absent. Opt-in because each mutation runs the whole security suite.
+        type: boolean
+        default: false
     secrets:
       TOOLKIT_TOKEN:
         description: Fine-grained PAT, read-only Contents on victorzhu443/security-agents. Required in every repo but the toolkit itself.
@@ -327,3 +337,104 @@ jobs:
           if [ "$MODE" = "frozen" ]; then NODEPS="--no-deps"; else NODEPS=""; fi
           echo "mode=$MODE file=$FILE ($(wc -l < "$FILE") lines)"
           "$RUNNER_TEMP/audit/bin/pip-audit" --strict --progress-spinner off $NODEPS -r "$FILE" $IGNORES
+
+  # EVALS-PLAN.md Layer 4: kill rate < 100 % on the known-bug set fails. Opt-in through
+  # `mutations: true`. The toolkit's mutation runner reverts one fix per entry of the
+  # caller's security/mutations.yaml in a throwaway worktree and runs the project's
+  # security tests; a mutation whose tests stay green is a hole in the regression net.
+  # The job is green when the repo has no mutations file yet (a notice says so).
+  mutation-gate:
+    if: ${{ inputs.mutations }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Look for security/mutations.yaml
+        id: spec
+        run: |
+          if [ -f security/mutations.yaml ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::security/mutations.yaml not found; mutation gate skipped (schema: evals/mutate.py in $TOOLKIT_REPO)"
+          fi
+
+      - name: Preflight (TOOLKIT_TOKEN)
+        if: steps.spec.outputs.present == 'true'
+        env: { TOKEN: "${{ secrets.TOOLKIT_TOKEN }}" }
+        run: |
+          if [ -z "$TOKEN" ] && [ "$GITHUB_REPOSITORY" != "$TOOLKIT_REPO" ]; then
+            echo "::warning::TOOLKIT_TOKEN is not set. The next step fails if $TOOLKIT_REPO is private. See CI-SETUP.md in that repo."
+          fi
+
+      - name: Check out the toolkit at this workflow's commit
+        if: steps.spec.outputs.present == 'true'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: ${{ env.TOOLKIT_REPO }}
+          ref: ${{ github.job_workflow_sha || github.sha }}
+          token: ${{ secrets.TOOLKIT_TOKEN || github.token }}
+          path: ${{ env.TOOLKIT_DIR }}
+          persist-credentials: false
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        if: steps.spec.outputs.present == 'true'
+        with:
+          python-version: ${{ inputs.python-version }}
+
+      - name: Let pip clone the private toolkit (requirements files pin it by git URL)
+        if: steps.spec.outputs.present == 'true'
+        env: { TOKEN: "${{ secrets.TOOLKIT_TOKEN }}" }
+        run: |
+          if [ -n "$TOKEN" ]; then
+            git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
+          fi
+
+      - name: Install the toolkit (evals.mutate lives in it) and pytest
+        if: steps.spec.outputs.present == 'true'
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "./${TOOLKIT_DIR}[fetch,sast]" pytest
+
+      - name: Install the project
+        if: steps.spec.outputs.present == 'true'
+        env:
+          REQ: ${{ inputs.requirements }}
+          CMD: ${{ inputs.install-cmd }}
+        run: |
+          if [ -n "$CMD" ]; then
+            bash -euo pipefail -c "$CMD"
+          elif [ -n "$REQ" ]; then
+            python -m pip install -r "$REQ"
+          else
+            echo "No requirements or install-cmd given; testing against the toolkit alone."
+          fi
+
+      - name: Test environment (tests-env)
+        if: steps.spec.outputs.present == 'true'
+        env: { TESTS_ENV: "${{ inputs.tests-env }}" }
+        run: |
+          if [ -n "$TESTS_ENV" ]; then
+            printf '%s\n' "$TESTS_ENV" | grep -E '^[A-Za-z_][A-Za-z0-9_]*=' >> "$GITHUB_ENV"
+          fi
+
+      # mutations.yaml's `test:` command usually names the repo's own interpreter
+      # (`.venv/bin/python -m pytest ...`), which the runner resolves against the repo and
+      # refuses to guess. CI has no such venv, so one is created over the job's Python,
+      # seeing the packages installed above. A repo that ships its own .venv is left alone.
+      - name: Give the test command its interpreter (.venv over the job's Python)
+        if: steps.spec.outputs.present == 'true'
+        run: |
+          if [ ! -e .venv ]; then python -m venv --system-site-packages .venv; fi
+          .venv/bin/python -c 'import sys; print("test interpreter:", sys.executable, sys.version.split()[0])'
+
+      - name: Mutation kill rate (every mutation must be killed)
+        if: steps.spec.outputs.present == 'true'
+        run: python -m evals.mutate --repo . --strict --out "$RUNNER_TEMP/mutation/mutation-${GITHUB_REPOSITORY##*/}.json"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always() && steps.spec.outputs.present == 'true'
+        with:
+          name: mutation-gate
+          path: ${{ runner.temp }}/mutation
