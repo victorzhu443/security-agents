@@ -310,8 +310,11 @@ def run_agent(repo_selector: Union[str, Sequence[Task]], *, model: str, trials: 
     lmod = _need(loop, "loop")
     gmod = _need(graders, "graders")
 
-    # 0. refuse to start on a rejected credential (free call; before the 3-minute gate)
-    lmod.preflight_auth()
+    # 0. refuse to start on a rejected credential (free call; before the 3-minute gate).
+    # A test double for the loop that never spends may omit it; the real loop always has it.
+    preflight = getattr(lmod, "preflight_auth", None)
+    if preflight is not None:
+        preflight()
 
     task_list, per_repo = _load_tasks(repo_selector, only, log)
     factory = env_factory or _env_factory(mode)
