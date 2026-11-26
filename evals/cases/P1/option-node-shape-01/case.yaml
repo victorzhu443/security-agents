@@ -1,0 +1,13 @@
+id: P1-option-node-shape-01
+property: P1
+origin: historical-miss
+grader: fuzz
+description: >
+  firstplay parse_ashby_dom: the control list was validated but each option node
+  was not, so {"options": ["a"]} raised an undeclared AttributeError (HTTP 500).
+  Clean routes every node through the shared validators.
+expect:
+  target: parser:parse
+  strategy: json
+  allowed: [MalformedInput]
+  max_examples: 300

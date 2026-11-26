@@ -1,0 +1,13 @@
+id: P2-redact-header-regex-01
+property: P2
+origin: historical-miss
+grader: cost
+description: >
+  study-hub redact(): the first fix narrowed \s to [ \t] and was verified on
+  newline runs only; [ \t]*-?[ \t]* was still ~O(n^2) on a run of spaces
+  (10k spaces = 2.2 s). The eval probes every character class.
+expect:
+  kind: regex
+  target: patterns:HEADER
+  n: 5000
+  deadline_s: 0.1
