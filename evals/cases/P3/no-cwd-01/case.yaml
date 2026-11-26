@@ -1,0 +1,11 @@
+id: P3-no-cwd-01
+property: P3
+origin: derived
+grader: containment
+description: >
+  The generated script is written into workdir and run by absolute path, but no cwd
+  is set, so every relative write the foreign code makes lands in the orchestrator's
+  own working directory (in practice the repo root). Clean pins cwd=workdir.
+expect:
+  target: runner:run_untrusted
+  probes: [cwd]

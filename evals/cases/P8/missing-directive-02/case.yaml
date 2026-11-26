@@ -1,0 +1,10 @@
+id: P8-missing-directive-02
+property: P8
+origin: derived
+grader: directive
+description: >
+  Second shape: the system prompt is a module-level constant handed to a chat client
+  separately from the messages. Vuln is a role description only; clean appends
+  promptinject.assemble.DIRECTIVE to it.
+expect:
+  target: prompts:SYSTEM_PROMPT

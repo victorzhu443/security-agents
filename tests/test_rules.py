@@ -71,6 +71,56 @@ CASES = {
         '])\n'
         'other = ChatPromptTemplate.from_template("Answer in {language}.")\n',
     ),
+    # ---- evals phase 2 (P3/P8) additions ---------------------------------------
+    # The inputs dict is built first and invoked later; the bind-site rule above
+    # never sees the key. Eval case P8-langchain-indirect-bind-01.
+    "untrusted-placeholder-bound-indirect": (
+        'def extract(job_text):\n'
+        '    inputs = {"job_text": job_text}\n'
+        '    return chain.invoke(inputs)\n'
+        'def render(page_text):\n'
+        '    payload = {"page_text": page_text, "n": 3}\n'
+        '    return prompt.format_messages(**payload)\n',
+        'def extract(job_text):\n'
+        '    inputs = {"job_text": harden_untrusted(job_text)}\n'
+        '    return chain.invoke(inputs)\n'
+        'def extract2(job_text):\n'
+        '    inputs = {"job_text": security.harden(job_text), "language": "en"}\n'
+        '    return chain.invoke(input=inputs)\n'
+        'def fmt(parser):\n'
+        '    inputs = {"format_instructions": parser.get_format_instructions()}\n'
+        '    return chain.invoke(inputs)\n'
+        'def log(job_text):\n'
+        '    payload = {"text": job_text}\n'
+        '    logger.info("payload %s", payload)\n',
+    ),
+    # In-process import of a module from the work dir (the orchestrator's old
+    # _load_pipeline), with the path assigned first and inline. Eval case
+    # P3-inprocess-import-01. The negative is the evals grader's own loader, which
+    # reads a path variable named `path` and must stay clean (CI scans it).
+    "inprocess-import-of-generated-code": (
+        'class O:\n'
+        '    def _load_pipeline(self):\n'
+        '        p = self.work / "pipeline.py"\n'
+        '        spec_ = importlib.util.spec_from_file_location("pipeline", p)\n'
+        '        mod = importlib.util.module_from_spec(spec_)\n'
+        '        spec_.loader.exec_module(mod)\n'
+        '        return mod\n'
+        'def load(workdir):\n'
+        '    spec = importlib.util.spec_from_file_location("gen", workdir / "gen.py")\n'
+        '    m = importlib.util.module_from_spec(spec)\n'
+        '    spec.loader.exec_module(m)\n'
+        'def run(outdir):\n'
+        '    return runpy.run_path(str(outdir / "pipeline.py"), run_name="__main__")\n',
+        'def load_attr(variant_dir, spec):\n'
+        '    path = variant_dir / (spec.replace(".", "/") + ".py")\n'
+        '    spec_ = importlib.util.spec_from_file_location("x", path)\n'
+        '    mod = importlib.util.module_from_spec(spec_)\n'
+        '    spec_.loader.exec_module(mod)\n'
+        '    return mod\n'
+        'def run_in_sandbox(workdir):\n'
+        '    return subprocess.run([sys.executable, "_runner.py"], cwd=workdir, env=child_env())\n',
+    ),
 }
 
 

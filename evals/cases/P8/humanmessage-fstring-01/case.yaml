@@ -1,0 +1,11 @@
+id: P8-humanmessage-fstring-01
+property: P8
+origin: derived
+grader: semgrep
+description: >
+  The f-string sink in LangChain's HumanMessage(content=...) shape, fed a scraped
+  page. Clean builds the messages through build_prompt instead of interpolating
+  (harden() inline in the f-string is also a fix, but see the grader gap pinned in
+  tests/test_evals_llmsep.py: the sink rule still fires on it).
+expect:
+  rule: untrusted-text-into-prompt-sink
