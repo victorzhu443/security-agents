@@ -19,4 +19,6 @@ from .bounded import (  # noqa: F401
     TooLarge, bounded_read, safe_xml_fromstring, safe_zip_members, redos_probe,
 )
 from .child_env import child_env, assert_no_secrets  # noqa: F401
-from .secrets import MissingSecret, require_secret, write_private  # noqa: F401
+from .secrets import (  # noqa: F401
+    MissingSecret, require_secret, write_private, app_env, is_dev, is_production,
+)
