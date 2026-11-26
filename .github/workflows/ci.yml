@@ -23,8 +23,21 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.11" }
-      - run: pip install -e . pytest
+      - run: pip install -e ".[fetch]" pytest semgrep
       - name: Prompt-injection demo (vulnerable vs hardened)
         run: python -m promptinject.harness
-      - name: Toolkit self-tests (harness, defenses, fuzz property)
+      - name: Toolkit self-tests (primitives, harness, rules)
         run: pytest tests/ -q
+
+  # RC-7: dependency audit. Copy this job into any project (point it at that
+  # project's lockfile / requirements). Fails on known vulnerabilities; accepted
+  # risks go in an ignore list with an expiry, never silently.
+  sca:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install pip-audit && pip install -e ".[fetch]"
+      - name: pip-audit (installed environment)
+        run: pip-audit --strict --progress-spinner off

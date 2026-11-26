@@ -114,3 +114,41 @@ rules:
       - metavariable-regex:
           metavariable: $K
           regex: ^(?!.*(EXAMPLE|PLACEHOLDER|os\.environ)).*$
+
+  # ---- RC-9: hardening defaults (see DESIGN.md §3.9) -------------------------
+  - id: weak-hash-non-crypto
+    languages: [python]
+    severity: WARNING
+    message: >
+      sha1/md5 without usedforsecurity=False. If this is a cache key or fingerprint,
+      pass usedforsecurity=False (keeps the digest stable, states intent, clears
+      scanners); if it is new, use hashlib.sha256. Never use these for signatures.
+    metadata: {category: security, cwe: "CWE-328"}
+    patterns:
+      - pattern: hashlib.$H(...)
+      - metavariable-regex:
+          metavariable: $H
+          regex: ^(sha1|md5)$
+      - pattern-not: hashlib.$H(..., usedforsecurity=False, ...)
+
+  - id: torch-load-unsafe
+    languages: [python]
+    severity: WARNING
+    message: >
+      torch.load without weights_only=True unpickles arbitrary objects (CWE-502).
+      Pass weights_only=True for model weights; only load full objects from
+      artifacts you produced and trust.
+    metadata: {category: security, cwe: "CWE-502"}
+    patterns:
+      - pattern: torch.load(...)
+      - pattern-not: torch.load(..., weights_only=True, ...)
+
+  - id: flask-dev-bind-all
+    languages: [python]
+    severity: WARNING
+    message: >
+      Flask's development server bound to 0.0.0.0. Serve production behind
+      gunicorn/an ingress; keep app.run() for local development on 127.0.0.1.
+    metadata: {category: security, cwe: "CWE-668"}
+    patterns:
+      - pattern: $APP.run(..., host="0.0.0.0", ...)
