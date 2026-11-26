@@ -1,0 +1,38 @@
+# Copy to <project>/.github/dependabot.yml.
+# Weekly update PRs for Python packages, GitHub Actions (SHA pins and `uses:` refs
+# included, with the version comment kept in sync) and npm. Minor and patch bumps
+# arrive grouped in one PR per ecosystem; majors come one at a time so the test suite
+# gates each on its own. Dependabot opens the PR; the security workflow decides.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      python-minor-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions-minor-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  # Delete this block in a repo with no package.json; point `directory` at the
+  # frontend folder (e.g. /frontend) where the lockfile lives.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      npm-minor-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]

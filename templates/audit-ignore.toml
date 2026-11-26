@@ -1,0 +1,15 @@
+# Accepted dependency risks for the `sca` job (pip-audit --strict).
+# Copy to <project>/audit-ignore.toml. Every entry needs all three keys:
+#
+#   id       the advisory id exactly as pip-audit prints it (PYSEC-, GHSA- or CVE-)
+#   reason   why the finding does not apply, or what blocks the fix
+#   expires  ISO date. On that day the sca job starts FAILING until the entry is
+#            removed (fixed) or re-justified with a new date. Nothing is accepted silently
+#            or forever; 90 days is the default horizon.
+#
+# The example below is not real: delete it when adding the first entry.
+
+[[ignore]]
+id = "PYSEC-2024-00000"
+reason = "Example only. Transitive via a CI-only tool; the vulnerable code path (XML parsing) is never reached. Fix lands when upstream pins the patched release."
+expires = 2027-02-24
