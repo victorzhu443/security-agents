@@ -1,0 +1,24 @@
+# Copy to <project>/.github/workflows/security.yml and fill in `with:`.
+# Runs security-tests, sast and sca from the shared toolkit (security-agents, private).
+# One-time setup -- the TOOLKIT_TOKEN secret and the toolkit's Actions access setting --
+# is in security-agents/CI-SETUP.md. Bump @v0.1.1 when the toolkit releases.
+name: security
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  security:
+    uses: victorzhu443/security-agents/.github/workflows/security-reusable.yml@v0.1.1
+    with:
+      python-version: "3.11"
+      requirements: requirements.txt          # "" if the project installs with install-cmd
+      source-dirs: "."                        # e.g. "app scripts"
+      semgrep-extra-configs: ""               # e.g. "p/django p/owasp-top-ten" for the web apps
+      tests-path: tests/security
+      # install-cmd: ""                       # e.g. pip install -e ".[dev]"
+      # bandit-skips: ""                      # e.g. "B314", with the reason in a comment here
+      # audit-ignore: audit-ignore.toml       # accepted risks, each with an expiry
+    secrets:
+      TOOLKIT_TOKEN: ${{ secrets.TOOLKIT_TOKEN }}   # the name all four repos use; see CI-SETUP.md §4

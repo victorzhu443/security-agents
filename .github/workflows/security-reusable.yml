@@ -1,0 +1,313 @@
+name: security (reusable)
+# The three enforcement jobs every one of Victor's repos runs (DESIGN.md §2.3, §3.7):
+#
+#   security-tests   pytest <tests-path> with the toolkit installed
+#   sast             Semgrep (toolkit rules + p/python + p/secrets + extras, --error) and bandit -ll
+#   sca              pip-audit --strict, with accepted risks in audit-ignore.toml (each one expires)
+#
+# A project repo calls it from its own .github/workflows/security.yml (see templates/security.yml):
+#
+#   jobs:
+#     security:
+#       uses: victorzhu443/security-agents/.github/workflows/security-reusable.yml@v0.1.1
+#       with: { ... }
+#       secrets: { TOOLKIT_TOKEN: "${{ secrets.TOOLKIT_TOKEN }}" }
+#
+# The toolkit is PRIVATE. The caller's GITHUB_TOKEN can run this file but cannot read the
+# toolkit's contents, so the jobs fetch the toolkit (rules, secprim, promptinject) with
+# TOOLKIT_TOKEN, a fine-grained PAT with read-only Contents on security-agents. CI-SETUP.md
+# has the one-time steps. The toolkit's own CI calls this file too, and there the caller's
+# GITHUB_TOKEN already reads the repo, so the secret is optional.
+#
+# The toolkit is checked out at github.job_workflow_sha -- the commit this very file came
+# from -- so the rules and the installed package always match the `@ref` the caller pinned.
+# Bumping the ref in the caller bumps everything at once.
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        description: Python version for every job.
+        type: string
+        default: "3.11"
+      requirements:
+        description: >-
+          Path to the project's requirements file. Installed before the tests and audited by
+          sca (VCS/local lines, including the toolkit's own git pin, are filtered out). Empty
+          means "none": the tests rely on install-cmd and sca audits the environment that
+          install-cmd builds.
+        type: string
+        default: ""
+      source-dirs:
+        description: Space-separated directories for Semgrep and bandit.
+        type: string
+        default: "."
+      semgrep-extra-configs:
+        description: Space-separated extra Semgrep configs, e.g. "p/django p/owasp-top-ten".
+        type: string
+        default: ""
+      tests-path:
+        description: Path given to pytest (a single path; it is word-split, so extra pytest flags work too).
+        type: string
+        default: "tests/security"
+      tests-env:
+        description: >-
+          Environment for the test run, one KEY=VALUE per line (e.g. a flag that forces a
+          local sandbox backend in CI). Appended to GITHUB_ENV before pytest.
+        type: string
+        default: ""
+      install-cmd:
+        description: >-
+          Shell command that installs the project for the tests (and, when requirements is
+          empty, builds the environment sca audits). Replaces the default
+          `pip install -r <requirements>`. Runs after the toolkit is installed, from the repo root.
+        type: string
+        default: ""
+      bandit-skips:
+        description: Comma-separated bandit test ids to skip, e.g. "B314". Say why in the caller.
+        type: string
+        default: ""
+      audit-ignore:
+        description: Path to the accepted-risk list for pip-audit (see templates/audit-ignore.toml). Absent file = no ignores.
+        type: string
+        default: "audit-ignore.toml"
+    secrets:
+      TOOLKIT_TOKEN:
+        description: Fine-grained PAT, read-only Contents on victorzhu443/security-agents. Required in every repo but the toolkit itself.
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  TOOLKIT_REPO: victorzhu443/security-agents
+  TOOLKIT_DIR: .security-agents
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  security-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Preflight (TOOLKIT_TOKEN)
+        env: { TOKEN: "${{ secrets.TOOLKIT_TOKEN }}" }
+        run: |
+          if [ -z "$TOKEN" ] && [ "$GITHUB_REPOSITORY" != "$TOOLKIT_REPO" ]; then
+            echo "::warning::TOOLKIT_TOKEN is not set. The next step fails if $TOOLKIT_REPO is private. See CI-SETUP.md in that repo."
+          fi
+
+      - name: Check out the toolkit at this workflow's commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: ${{ env.TOOLKIT_REPO }}
+          ref: ${{ github.job_workflow_sha || github.sha }}
+          token: ${{ secrets.TOOLKIT_TOKEN || github.token }}
+          path: ${{ env.TOOLKIT_DIR }}
+          persist-credentials: false
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: ${{ inputs.python-version }}
+
+      - name: Let pip clone the private toolkit (requirements files pin it by git URL)
+        env: { TOKEN: "${{ secrets.TOOLKIT_TOKEN }}" }
+        run: |
+          if [ -n "$TOKEN" ]; then
+            git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
+          fi
+
+      - name: Install the toolkit (fetch = secprim.safe_fetch, sast = semgrep for rule fixture tests) and pytest
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "./${TOOLKIT_DIR}[fetch,sast]" pytest
+
+      - name: Install the project
+        env:
+          REQ: ${{ inputs.requirements }}
+          CMD: ${{ inputs.install-cmd }}
+        run: |
+          if [ -n "$CMD" ]; then
+            bash -euo pipefail -c "$CMD"
+          elif [ -n "$REQ" ]; then
+            python -m pip install -r "$REQ"
+          else
+            echo "No requirements or install-cmd given; testing against the toolkit alone."
+          fi
+
+      - name: Test environment (tests-env)
+        env: { TESTS_ENV: "${{ inputs.tests-env }}" }
+        run: |
+          if [ -n "$TESTS_ENV" ]; then
+            printf '%s\n' "$TESTS_ENV" | grep -E '^[A-Za-z_][A-Za-z0-9_]*=' >> "$GITHUB_ENV"
+          fi
+
+      - name: Security test suite
+        env: { TESTS: "${{ inputs.tests-path }}" }
+        run: python -m pytest $TESTS -q
+
+  sast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Preflight (TOOLKIT_TOKEN)
+        env: { TOKEN: "${{ secrets.TOOLKIT_TOKEN }}" }
+        run: |
+          if [ -z "$TOKEN" ] && [ "$GITHUB_REPOSITORY" != "$TOOLKIT_REPO" ]; then
+            echo "::warning::TOOLKIT_TOKEN is not set. The next step fails if $TOOLKIT_REPO is private. See CI-SETUP.md in that repo."
+          fi
+
+      - name: Check out the toolkit's Semgrep rules at this workflow's commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: ${{ env.TOOLKIT_REPO }}
+          ref: ${{ github.job_workflow_sha || github.sha }}
+          token: ${{ secrets.TOOLKIT_TOKEN || github.token }}
+          path: ${{ env.TOOLKIT_DIR }}
+          persist-credentials: false
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: ${{ inputs.python-version }}
+
+      # Exact pins so Dependabot (pip ecosystem) can track them; bump here, not in callers.
+      - run: python -m pip install --upgrade pip && python -m pip install semgrep==1.136.0 bandit==1.8.6
+
+      - name: Semgrep (toolkit rules + python/secrets packs + extras; any finding fails)
+        env:
+          EXTRA_CONFIGS: ${{ inputs.semgrep-extra-configs }}
+          SOURCE_DIRS: ${{ inputs.source-dirs }}
+        run: |
+          EXTRA=""
+          for c in $EXTRA_CONFIGS; do EXTRA="$EXTRA --config $c"; done
+          semgrep scan \
+            --config "${TOOLKIT_DIR}/semgrep/rules.yml" --config p/python --config p/secrets $EXTRA \
+            --error --metrics off \
+            --exclude "$TOOLKIT_DIR" --exclude .venv --exclude node_modules \
+            --exclude '*.min.js' --exclude '*.lock' \
+            $SOURCE_DIRS
+
+      - name: bandit (medium severity and up fails)
+        env:
+          SOURCE_DIRS: ${{ inputs.source-dirs }}
+          TESTS: ${{ inputs.tests-path }}
+          SKIPS: ${{ inputs.bandit-skips }}
+        run: |
+          TESTS_DIR="${TESTS%% *}"
+          EXCLUDE="./${TOOLKIT_DIR},${TOOLKIT_DIR},./.venv,.venv,./node_modules,node_modules,./${TESTS_DIR},${TESTS_DIR}"
+          SKIP_ARGS=""
+          [ -n "$SKIPS" ] && SKIP_ARGS="-s $SKIPS"
+          bandit -r $SOURCE_DIRS -ll -q -x "$EXCLUDE" $SKIP_ARGS
+
+  # RC-7: fail on any known vulnerability. Accepted risks go in audit-ignore.toml with a
+  # reason and an expiry; an expired entry fails the job until it is removed or re-justified.
+  sca:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: ${{ inputs.python-version }}
+
+      # pip-audit lives in its own venv and is only ever called by absolute path. Its bin dir is
+      # NOT added to GITHUB_PATH (that prepends, and every later `python`/`pip` in the job
+      # would silently resolve to the audit venv, installing the project into it and auditing
+      # pip-audit's own dependency tree as the project's).
+      - name: Install pip-audit in its own venv
+        run: |
+          python -m venv "$RUNNER_TEMP/audit"
+          "$RUNNER_TEMP/audit/bin/pip" install --quiet --upgrade pip pip-audit
+          "$RUNNER_TEMP/audit/bin/pip-audit" --version
+
+      - name: Guard - the project interpreter is setup-python's, not the audit venv's
+        run: |
+          echo "python: $(command -v python) ($(python --version 2>&1))"
+          echo "pip-audit: $RUNNER_TEMP/audit/bin/pip-audit"
+          case "$(command -v python)" in
+            "$RUNNER_TEMP"/*) echo "::error::python resolves inside the audit venv; the project would be audited against the wrong environment"; exit 1 ;;
+          esac
+
+      - name: Let pip clone the private toolkit (install-cmd may need it)
+        env: { TOKEN: "${{ secrets.TOOLKIT_TOKEN }}" }
+        run: |
+          if [ -n "$TOKEN" ]; then
+            git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
+          fi
+
+      - name: Build the list to audit
+        id: list
+        env:
+          REQ: ${{ inputs.requirements }}
+          CMD: ${{ inputs.install-cmd }}
+        # pip-audit can only audit what is on PyPI. VCS pins (the toolkit), editable and local
+        # path lines are dropped; the toolkit is audited by its own CI.
+        run: |
+          FILTER='^[[:space:]]*-e[[:space:]]|git\+|security-agents|^[[:space:]]*\.|^[[:space:]]*/'
+          if [ -n "$REQ" ]; then
+            OUT="$(dirname "$REQ")/.audit-requirements.txt"
+            grep -v -E "$FILTER" "$REQ" > "$OUT" || true
+            echo "mode=resolve" >> "$GITHUB_OUTPUT"
+          elif [ -n "$CMD" ]; then
+            python -m pip install --upgrade pip
+            bash -euo pipefail -c "$CMD"
+            OUT="$RUNNER_TEMP/audit-frozen.txt"
+            echo "frozen from: $(command -v python) ($(python --version 2>&1)), $(python -m pip --version)"
+            python -m pip freeze --exclude-editable | grep -v -E "$FILTER" > "$OUT" || true
+            echo "mode=frozen" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::sca needs either 'requirements' or 'install-cmd' to know what to audit."
+            exit 1
+          fi
+          echo "file=$OUT" >> "$GITHUB_OUTPUT"
+          echo "Auditing:"; cat "$OUT"
+
+      - name: Accepted risks from audit-ignore.toml (an expired entry fails; the rest go to pip-audit)
+        id: ignores
+        env: { IGNORE_FILE: "${{ inputs.audit-ignore }}" }
+        run: |
+          python -c 'import tomllib' 2>/dev/null || python -m pip install --quiet tomli
+          python - <<'PY'
+          import datetime as dt, os, pathlib, re, sys
+          try:
+              import tomllib
+          except ImportError:
+              import tomli as tomllib
+          out = open(os.environ["GITHUB_OUTPUT"], "a")
+          path = pathlib.Path(os.environ["IGNORE_FILE"])
+          if not path.is_file():
+              print(f"no {path}; nothing ignored"); out.write("args=\n"); sys.exit(0)
+          entries = tomllib.loads(path.read_text()).get("ignore", [])
+          today, args, errors = dt.date.today(), [], []
+          for e in entries:
+              vid, reason, exp = e.get("id"), e.get("reason"), e.get("expires")
+              if not (vid and reason and exp):
+                  errors.append(f"entry {vid or '?'}: every entry needs id, reason and expires"); continue
+              if not re.fullmatch(r"[A-Za-z0-9._-]+", vid):
+                  errors.append(f"entry {vid}: id must be a bare advisory id"); continue
+              if isinstance(exp, dt.datetime): exp = exp.date()
+              elif isinstance(exp, str): exp = dt.date.fromisoformat(exp)
+              if exp < today:
+                  errors.append(f"{vid}: ignore expired on {exp.isoformat()} -- fix it or re-justify with a new expiry ({reason})"); continue
+              print(f"ignoring {vid} until {exp.isoformat()}: {reason}")
+              args += ["--ignore-vuln", vid]
+          for msg in errors:
+              print(f"::error file={path}::{msg}")
+          if errors:
+              sys.exit(1)
+          out.write("args=" + " ".join(args) + "\n")
+          PY
+
+      - name: pip-audit (strict)
+        env:
+          MODE: ${{ steps.list.outputs.mode }}
+          FILE: ${{ steps.list.outputs.file }}
+          IGNORES: ${{ steps.ignores.outputs.args }}
+        run: |
+          if [ "$MODE" = "frozen" ]; then NODEPS="--no-deps"; else NODEPS=""; fi
+          echo "mode=$MODE file=$FILE ($(wc -l < "$FILE") lines)"
+          "$RUNNER_TEMP/audit/bin/pip-audit" --strict --progress-spinner off $NODEPS -r "$FILE" $IGNORES
