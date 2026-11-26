@@ -437,7 +437,8 @@ def test_run_refuses_to_start_on_rejected_credential(tmp_path, monkeypatch):
 
 
 def test_preflight_auth_wraps_sdk_errors():
-    import anthropic, httpx
+    anthropic = pytest.importorskip("anthropic")   # the `agent` extra; CI's base env lacks it
+    httpx = pytest.importorskip("httpx")
     from evals.agent import loop as L
     class Bad:
         class models:
