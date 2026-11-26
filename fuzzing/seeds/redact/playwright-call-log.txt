@@ -1,0 +1,5 @@
+page.goto: net::ERR_CONNECTION_RESET at https://canvas.example.edu/api/v1/courses
+Call log:
+  - navigating to "https://canvas.example.edu/api/v1/courses", waiting until "load"
+  - cookie: canvas_session=SEEDVALUEnotreal0001; _csrf_token=SEEDVALUEnotreal0002
+  - authorization: Bearer SEEDVALUEnotreal0003

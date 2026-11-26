@@ -1,0 +1,3 @@
+GET /logic/api?remember_user_token=SEEDVALUEnotreal0007&page=2 HTTP/1.1
+set-cookie: pseudonym_credentials=SEEDVALUEnotreal0008; Path=/; HttpOnly
+token eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJzZWVkIn0.c2VlZHNpZ25hdHVyZQ

@@ -1,0 +1,36 @@
+# Coverage-guided fuzzing image: CPython 3.12 + clang/libFuzzer + Atheris.
+#
+# Why this exists: `pip install atheris` needs a clang that ships libFuzzer.
+# Apple Clang does not, so on macOS the native install fails at build time
+# ("Failed to find libFuzzer; you may be building using Apple Clang"). Linux
+# clang does, so the fuzzer runs in this container instead. run_atheris.sh
+# builds and uses it automatically when the host Python has no `atheris`.
+#
+# Build (from the security-agents repo root):
+#   docker build -f fuzzing/Dockerfile.atheris -t security-agents/atheris .
+# Run (mount the toolkit at /work and the target's source at /target):
+#   docker run --rm -v "$PWD:/work" -v /path/to/target/src:/target:ro \
+#       security-agents/atheris redact:redact --runs 20000
+FROM python:3.12-slim
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends clang libclang-rt-dev \
+ && rm -rf /var/lib/apt/lists/*
+
+# Atheris's setup.py compiles with $CC/$CXX and locates libFuzzer through
+# $CLANG_BIN. The slim image has no `cc` at all, so without these it dies with
+# "Unsupported compiler -- at least C++11 support is needed!".
+ENV CC=clang CXX=clang++ CLANG_BIN=/usr/bin/clang
+
+# The toolkit's own test dependency and Atheris (built from source against the
+# container's clang, which is the whole point of the container).
+RUN pip install --no-cache-dir "hypothesis>=6.100" "atheris>=2.3"
+
+WORKDIR /work
+# /work is the security-agents checkout (so `fuzzing.atheris_harness` imports);
+# /target is the directory holding the module under test (so `module:function`
+# resolves). Both are bind mounts at run time; nothing is copied into the image.
+ENV PYTHONPATH=/work:/target
+ENV PYTHONUNBUFFERED=1
+
+ENTRYPOINT ["python", "-m", "fuzzing.atheris_harness"]
