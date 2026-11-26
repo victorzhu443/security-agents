@@ -28,6 +28,7 @@ runbooks/      burp-suite.md (web apps), metasploit-lab.md (isolated lab)
 PLAN.md        per-project × per-skill plan, with step-by-step tasks and status
 ROOT-CAUSES.md every finding across the repos → 9 root causes → a solution each
 DESIGN.md      the exhaustive system design: current state, architecture decisions,
+EVALS-PLAN.md  evals from the ground up: properties → oracles → case corpus → metrics → gates → agent eval
                per-root-cause component design, feature selection, edit manifest
 ```
 
