@@ -103,6 +103,7 @@ Then fill `with:` in `security.yml`. Inputs (all optional):
 | `requirements` | `""` | requirements file: installed before the tests, audited by `sca` (VCS/local/toolkit lines filtered out) |
 | `source-dirs` | `"."` | space-separated dirs for Semgrep and bandit |
 | `semgrep-extra-configs` | `""` | e.g. `"p/django p/owasp-top-ten"` |
+| `semgrep-exclude-rules` | `""` | space-separated rule ids passed as `--exclude-rule`, for a registry rule the repo has triaged as a whole (constant-identifier `sqlalchemy.text` sites, say) instead of a `nosemgrep` on every line; the reason goes in a comment beside it |
 | `tests-path` | `"tests/security"` | passed to pytest |
 | `tests-env` | `""` | `KEY=VALUE` lines exported before pytest |
 | `install-cmd` | `""` | replaces `pip install -r <requirements>` for the tests; when `requirements` is empty, also builds the environment `sca` audits |
@@ -124,18 +125,35 @@ groups:
 minor and patch bumps, so majors arrive as their own PRs and the test suite gates each
 one alone. A group without `update-types` would fold majors in with the rest.
 
+Every block also carries `cooldown: { default-days: 7 }`: Dependabot waits a week
+after a release before proposing it. A malicious release (a hijacked maintainer
+account, a poisoned build) is usually pulled within days; the delay keeps it out of
+the repo during that window. Semgrep's registry rule
+`package_managers.dependabot.dependabot-missing-cooldown` fails `sast` on a
+Dependabot config without one.
+
 Starting points per repo, matching what each repo's draft `security.yml` does today:
 
 | Repo | `with:` |
 |---|---|
 | research-replication-agent (uv, 3.12) | `python-version: "3.12"`, `requirements: ""`, `install-cmd: pip install uv && uv export --frozen --no-hashes --no-emit-project -o requirements-lock.txt && pip install -r requirements-lock.txt -e .`, `tests-env: REPLICATOR_SANDBOX_BACKEND=local`, `source-dirs: replicator` |
-| smart-dispatch (Django) | `requirements: requirements.txt`, `install-cmd: pip install -r requirements_minimal.txt Django sqlalchemy hypothesis`, `semgrep-extra-configs: "p/django p/owasp-top-ten p/kubernetes"`; move the `--ignore-vuln` ids into `audit-ignore.toml` with `expires = 2026-12-31` |
+| smart-dispatch (Django) | `requirements: requirements.txt`, `install-cmd: pip install -r requirements_minimal.txt Django sqlalchemy hypothesis`, `semgrep-extra-configs: "p/django p/owasp-top-ten p/kubernetes"`, `semgrep-exclude-rules: python.sqlalchemy.security.audit.avoid-sqlalchemy-text.avoid-sqlalchemy-text` (its `sqlalchemy.text(...)` sites take constant identifiers, triaged as a whole); move the `--ignore-vuln` ids into `audit-ignore.toml` with `expires = 2026-12-31` |
 | study-hub | `requirements: requirements.txt`, `tests-path: tests` |
 | firstplay-backend (3.11 in CI and prod; `requires-python` says 3.9 but nothing runs there) | `python-version: "3.11"`, `requirements: requirements.txt`, `install-cmd: pip install -r requirements.txt -r requirements-dev.txt` (the tests need `pytest-asyncio` and `reportlab` from the dev file; `sca` still audits `requirements.txt` alone), `semgrep-extra-configs: "p/owasp-top-ten"` plus the framework pack |
 
 Commit, push, and watch the first run (`gh run watch -R victorzhu443/<repo>`). Three
-jobs appear under `security /`: `security-tests`, `sast`, `sca`. Any finding fails;
-that is the point.
+jobs appear under `security /`: `security-tests`, `sast`, `sca`.
+
+What fails `sast`, by Semgrep severity: **ERROR and WARNING findings fail the job**;
+**INFO findings never do**. INFO rules are review aids: they mark places a reviewer
+should look at, not defects. The toolkit's own
+`untrusted-placeholder-in-prompt-template` is one, and it fires on hardened prompts as
+well as naive ones, because it cannot tell the two apart. The job runs Semgrep twice,
+a blocking pass at ERROR/WARNING and a report-only pass at INFO, so the INFO findings
+are in the log under "Review aids" without gating the merge. bandit's threshold is
+Medium severity and up. A registry rule the repo has triaged as a whole goes in
+`semgrep-exclude-rules`; a single triaged line gets a `# nosemgrep: <rule-id>` with the
+reason.
 
 ## 6. Accepted risks: `audit-ignore.toml`
 

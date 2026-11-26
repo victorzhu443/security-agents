@@ -3,6 +3,8 @@
 # included, with the version comment kept in sync) and npm. Minor and patch bumps
 # arrive grouped in one PR per ecosystem; majors come one at a time so the test suite
 # gates each on its own. Dependabot opens the PR; the security workflow decides.
+# Every block waits 7 days after a release before proposing it (cooldown): a malicious
+# release is usually pulled within days, and the delay keeps it out of the repo meanwhile.
 version: 2
 updates:
   - package-ecosystem: pip
@@ -10,6 +12,8 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 7
     groups:
       python-minor-patch:
         patterns: ["*"]
@@ -20,6 +24,8 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 7
     groups:
       actions-minor-patch:
         patterns: ["*"]
@@ -32,6 +38,8 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 7
     groups:
       npm-minor-patch:
         patterns: ["*"]
