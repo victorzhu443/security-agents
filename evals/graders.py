@@ -131,7 +131,11 @@ class SemgrepGrader:
 
 
 class FuzzGrader:
-    """P1: the safe-degradation property. Detected = an undeclared exception."""
+    """P1: the safe-degradation property. Detected = an undeclared exception.
+
+    Deterministic by construction: `expect.examples` (the known trigger shapes) are
+    tried first, then Hypothesis runs derandomized so a run is reproducible. Recall
+    on a case therefore never depends on the random seed."""
     name = "fuzz"
 
     def grade(self, case: Case, variant: str) -> Result:
@@ -142,12 +146,22 @@ class FuzzGrader:
             return Result(False, error=f"load: {e!r}")
         allowed = tuple(resolve_exception(n) for n in case.expect.get(
             "allowed", ["ValueError", "TypeError", "KeyError", "MalformedInput"]))
+        for ex in case.expect.get("examples", []):
+            try:
+                fn(ex)
+            except allowed:
+                pass
+            except Exception as e:  # noqa: BLE001
+                return Result(True, metrics={"via": "example"},
+                              evidence=f"{type(e).__name__} on example {repr(ex)[:80]}")
         strategy = json_like() if case.expect.get("strategy") == "json" else text_like
+        group = getattr(builtins, "BaseExceptionGroup", AssertionError)
         try:
             assert_robust(fn, allowed=allowed, strategy=strategy,
-                          max_examples=int(case.expect.get("max_examples", 200)))()
-        except AssertionError as e:
-            return Result(True, evidence=str(e)[:300])
+                          max_examples=int(case.expect.get("max_examples", 200)),
+                          derandomize=True, report_multiple_bugs=False)()
+        except (AssertionError, group) as e:
+            return Result(True, metrics={"via": "hypothesis"}, evidence=str(e)[:300])
         return Result(False, evidence="only declared exceptions")
 
 

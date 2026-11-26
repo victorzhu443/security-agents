@@ -92,3 +92,14 @@ def test_plugin_graders_are_discovered(tmp_path, monkeypatch):
     finally:
         plug.unlink()
         _sys.modules.pop("evals.graders_zz_test_plugin", None)
+
+
+def test_fuzz_grader_is_deterministic_and_uses_examples_first():
+    case = next(c for c in discover(CASES) if c.id == "P1-option-node-shape-01")
+    g = default_graders(REPO)["fuzz"]
+    a = g.grade(case, "vuln"); b = g.grade(case, "vuln")
+    assert a.detected and b.detected and a.metrics == b.metrics == {"via": "example"}
+    # without examples, hypothesis must still be reproducible run to run
+    case.expect = {**case.expect, "examples": []}
+    c1 = g.grade(case, "vuln"); c2 = g.grade(case, "vuln")
+    assert c1.detected == c2.detected and c1.evidence == c2.evidence

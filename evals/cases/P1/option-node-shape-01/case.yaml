@@ -11,3 +11,7 @@ expect:
   strategy: json
   allowed: [MalformedInput]
   max_examples: 300
+  examples:               # the shapes that were actually missed; tried before fuzzing
+    - {options: ["a"]}
+    - {options: [1]}
+    - {options: [null]}
