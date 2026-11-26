@@ -542,3 +542,46 @@ only what depends on the container existing.
 **Definition of done per repo:** the three CI jobs exist and are green; the
 repo's `SECURITY.md` lists no RC item as "DOC" that §4 marked NOW; and the
 per-repo PR diff touches only the files in §5.
+
+---
+
+## 7. Status — implementation and verification complete (2026-11-26)
+
+Every root cause has an implementation PR per repo, each independently verified
+(own test run in a clean worktree + direct check of every named defect), then a
+**per-area cross-repo verification wave** (five reviewers, one per security
+area, read-only) found further defects in every repo and in one toolkit
+primitive, all fixed in one consolidated round per repo and re-verified.
+
+| Repo | PRs (stacked: baseline → root-causes) | Verified |
+|---|---|---|
+| research-replication-agent | #1 → #2 | 105 security / 126 whole suite |
+| smart-dispatch | #19 → #20 | 83 security / 205 repo (+37 skipped) |
+| study-hub | #1 → #2 | 103 (isolated hub; live tree untouched) |
+| firstplay-backend (+ frontend) | #36 → #37 (+ frontend #6) | 49 security / 1,340 full suite |
+| security-agents (toolkit) | #1 CI, #2 fuzzing, #3 SAST, #4 secrets, #5 fuzz_lib | #1 CI green; others 70–93 tests |
+
+**Found by the verification wave and fixed:** CS track ran outside the sandbox
+(RRA); `ingest_recent.py` (the live cron) bypassed the pinned fetch and the
+rate limiter never counted rejected requests (SD); content-derived Piazza links
+fetched with no host check, session files created world-readable, XML size
+checked after decompression (SH); `resume_parser` sink unhardened and the
+autofill binder fenced without the directive (FP); **`require_secret` failed
+open on any non-prod label** (toolkit, PR #4); the reusable `sca` job audited the
+wrong interpreter (toolkit, PR #1 fix).
+
+**Pin dependency (must precede merging repo PRs):** the fix rounds use
+`fuzzing.fuzz_lib.size_sweep` and `secprim.is_dev`, which exist only after
+toolkit PRs #2 and #4 → merge toolkit PRs → tag `v0.1.1` → bump each repo's
+`security-agents@v0.1.0` pin to `v0.1.1` → merge repo PRs (baseline first).
+
+**Documented follow-ups (not blocking):** RRA container backend end-to-end,
+generated-artifact pickle, a `HEAD` probe on a fixed MNIST host; SD `model.pt`
+scaler split (`weights_only=True`), `flask`/`flask-cors`/`scikit-learn` majors;
+FP backend dependency CVEs and frontend `npm audit` highs (dependency-bump PRs);
+convergence of each repo's inline CI on `templates/security.yml@v0.1.1`;
+Burp Suite / Metasploit remain manual lab exercises.
+
+**Process lesson recorded:** several agents sharing one git checkout stepped on
+each other's staged files; every later agent worked from an isolated worktree.
+Rule: one worktree per concurrent agent.

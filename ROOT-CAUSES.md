@@ -481,3 +481,22 @@ every repo.
    fetch + RC-5 `write_private` + RC-1 `contained_path`.
 5. **SD:** RC-6 access control + RC-5 `require_secret` + RC-2 `safe_zip` +
    RC-9 (torch, k8s, hashes) + RC-7 dependency majors.
+
+---
+
+## Status update — 2026-11-26
+
+All nine root causes have landed fixes in the per-repo `security/root-causes`
+PRs (see DESIGN.md §7 for PR numbers and verification). Status by RC:
+
+| RC | Status | Where |
+|---|---|---|
+| RC-1 boundary validation | **FIXED** (shared `secprim.boundary`; parser registry rule per repo; structural fuzz found + closed 4 more wrong-type crashes in FP) | all four repos |
+| RC-2 resource bounds | **FIXED** (`bounded_read`/`safe_xml`/`safe_zip_members`; `redos_probe` + `size_sweep` over every untrusted regex/parser; 9 quadratic regexes replaced) | all four repos |
+| RC-3 execution sandbox | **FIXED locally**; container backend built but **untested end to end** | RRA |
+| RC-4 pinned fetch | **FIXED** (every content/caller-derived fetch through `safe_fetch`; fixed-host adapters allow-listed; one `HEAD` probe residual) | all four repos |
+| RC-5 secrets | **FIXED** (`require_secret` fails closed after toolkit PR #4; `child_env` allow-list; `write_private` at every session write) | SD, RRA, SH |
+| RC-6 access control | **FIXED** (bearer gate, counting limiter, scoped CORS, Django-only client, ingress rate limits) | SD |
+| RC-7 supply chain | **FIXED** (SCA + SAST + security tests per repo, SHA-pinned actions, Dependabot, expiring ignore list); dependency **majors** remain as their own PRs | all repos + toolkit |
+| RC-8 LLM separation | **FIXED** (every FP sink hardened + directive + output scrub; RRA reader/actor split verified; all three paper prompts carry the directive) | FP, RRA |
+| RC-9 hardening defaults | **FIXED** except SD `torch.load` artifact split (documented follow-up) | FP, SH, SD |
