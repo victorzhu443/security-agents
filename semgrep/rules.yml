@@ -20,7 +20,6 @@ rules:
       # Only fire on real message/prompt construction, not logs or report strings.
       - pattern-either:
           - pattern: '{..., "content": f"...{$DOC}...", ...}'
-          - pattern: "{..., \"content\": f\"...{$DOC}...\", ...}"
           - pattern: content=f"...{$DOC}..."
           - pattern: HumanMessage(f"...{$DOC}...")
           - pattern: HumanMessage(content=f"...{$DOC}...")
@@ -28,6 +27,92 @@ rules:
       - metavariable-regex:
           metavariable: $DOC
           regex: (?i).*(text|content|document|page|chunk|body|source|passage|snippet|html|paper|user_input|answer|summary).*
+
+  # ---- LLM01 via templated prompts (LangChain) --------------------------------
+  # The rule above sees the string being built. A LangChain template separates
+  # the two halves: the placeholder lives in ChatPromptTemplate.from_messages /
+  # PromptTemplate, and the untrusted value is bound later by chain.invoke({...}),
+  # .format_messages(k=v), or a project wrapper that forwards the dict. The next
+  # two rules cover each half: the bind site is the finding (WARNING); the
+  # template is a pointer to go and check the bind site (INFO).
+  - id: untrusted-placeholder-bound-unhardened
+    languages: [python]
+    severity: WARNING
+    message: >
+      An untrusted-looking placeholder ("$K") is bound to a raw value at a prompt
+      bind site ($F). If the template this feeds is sent to a model, this is the
+      prompt-injection (OWASP LLM01) sink: the value becomes part of the
+      instruction. Wrap the value at the bind site — harden(...) /
+      harden_untrusted(...) from the project's security module, or Untrusted(...)
+      via build_prompt(...) — and keep the directive in the system message.
+    metadata:
+      category: security
+      cwe: "CWE-74: Improper Neutralization of Special Elements"
+      owasp: "LLM01: Prompt Injection"
+    patterns:
+      - pattern-either:
+          # chain.invoke({...}) / .ainvoke / .stream, and project wrappers that
+          # take the dict positionally (invoke_chain, invoke_with_retry).
+          - pattern: '$F(..., {..., "$K": $V, ...}, ...)'
+          # .batch([{...}, {...}]) — only literal dicts; a comprehension is opaque.
+          - pattern: '$F(..., [..., {..., "$K": $V, ...}, ...], ...)'
+          # .invoke(input={...})
+          - pattern: '$F(..., input={..., "$K": $V, ...}, ...)'
+          # tmpl.format(**{...}) / .format_messages(**{...})
+          - pattern: '$F(**{..., "$K": $V, ...})'
+          # tmpl.format_messages(k=v) / .format_prompt(k=v) / .format(k=v)
+          - pattern: $F(..., $K=$V, ...)
+      # The callee must look like a chain invocation or template render.
+      # metavariable-regex is anchored at the start of the bound text, so the
+      # optional dotted prefix is spelled out.
+      - metavariable-regex:
+          metavariable: $F
+          regex: (?i)^(.*\.)?(a?invoke|a?batch|a?stream|invoke_chain|invoke_with_retry|a?format|a?format_messages|a?format_prompt)$
+      # The key is the same untrusted-name list as the rule above, plus the
+      # names the projects actually use for scraped/uploaded text.
+      - metavariable-regex:
+          metavariable: $K
+          regex: (?i).*(text|content|document|page|chunk|body|source|passage|snippet|html|paper|user_input|answer|summary|job_text|resume_text|query).*
+      # The value is exempt when it is a plain string literal (app-controlled)
+      # or when the expression *is* a call to a sanctioned hardening function,
+      # optionally module-qualified or parenthesised. A hardening call nested
+      # deeper (a if ok else harden(a)) does not exempt the value.
+      - metavariable-regex:
+          metavariable: $V
+          regex: (?s)^(?!\s*["'])(?!\s*\(*\s*([\w.]+\.)?(harden|harden_untrusted|Untrusted|build_prompt)\s*\().*$
+      - focus-metavariable: $V
+
+  - id: untrusted-placeholder-in-prompt-template
+    languages: [python]
+    severity: INFO
+    message: >
+      This prompt template has an untrusted-looking placeholder ({...$TMPL...}
+      names text/content/document/query/...). The template is not the finding —
+      confirm the bind site (chain.invoke / format_messages / the project's
+      invoke wrapper) hardens the value before it is bound, and that the system
+      message carries the data-not-instruction directive. See
+      untrusted-placeholder-bound-unhardened for the bind-site check.
+    metadata:
+      category: security
+      cwe: "CWE-74: Improper Neutralization of Special Elements"
+      owasp: "LLM01: Prompt Injection"
+    patterns:
+      - pattern-either:
+          # ChatPromptTemplate.from_messages([("human", "..."), ...]); the
+          # string may be concatenated with a directive constant on either side.
+          - pattern: '$T.from_messages([..., ("$ROLE", "$TMPL"), ...])'
+          - pattern: '$T.from_messages([..., ("$ROLE", "$TMPL" + $REST), ...])'
+          - pattern: '$T.from_messages([..., ("$ROLE", $PRE + "$TMPL"), ...])'
+          # from_messages(["...", ...]) and nested *.from_template("...") entries
+          - pattern: '$T.from_messages([..., "$TMPL", ...])'
+          - pattern: '$T.from_messages([..., $M("$TMPL"), ...])'
+          # ChatPromptTemplate.from_template("...") / PromptTemplate(template="...")
+          - pattern: '$T.from_template("$TMPL", ...)'
+          - pattern: '$T(..., template="$TMPL", ...)'
+      - metavariable-regex:
+          metavariable: $TMPL
+          regex: (?is).*\{[a-z0-9_]*(text|content|document|page|chunk|body|source|passage|snippet|html|paper|user_input|answer|summary|job_text|resume_text|query)[a-z0-9_]*\}.*
+      - focus-metavariable: $TMPL
 
   - id: subprocess-shell-true
     languages: [python]

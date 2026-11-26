@@ -45,6 +45,32 @@ CASES = {
         'msgs = [{"role": "user", "content": f"Source:\\n{document_text}"}]\n',
         'msgs = [{"role": "user", "content": "Summarize the source below."}]\n',
     ),
+    # LangChain bind site, firstplay's shape: the placeholder is bound by name
+    # at invoke time, so the f-string rule above never sees it.
+    "untrusted-placeholder-bound-unhardened": (
+        'result = chain.invoke({"job_text": job_text})\n'
+        'msgs = prompt.format_messages(resume_text=resume_text)\n'
+        'r = invoke_with_retry(make_chain, {"job_text": job_text}, description="x")\n',
+        'result = chain.invoke({"job_text": harden_untrusted(job_text)})\n'
+        'result = chain.invoke({"job_text": security.harden_untrusted(job_text)})\n'
+        'result = chain.invoke({"job_text": "Backend intern. Python, SQL."})\n'
+        'result = chain.invoke({"format_instructions": parser.get_format_instructions()})\n'
+        'msgs = prompt.format_messages(resume_text=harden(resume_text))\n'
+        'logger.info("payload %s", {"text": job_text})\n'
+        'result = chain.invoke(payload)\n',
+    ),
+    # The template half: a review aid pointing at the bind site.
+    "untrusted-placeholder-in-prompt-template": (
+        'prompt = ChatPromptTemplate.from_messages([\n'
+        '    ("system", "You extract fields from a job posting."),\n'
+        '    ("human", "Posting:\\n{job_text}"),\n'
+        '])\n',
+        'prompt = ChatPromptTemplate.from_messages([\n'
+        '    ("system", "You extract fields from a job posting."),\n'
+        '    ("human", "Return JSON matching {format_instructions}."),\n'
+        '])\n'
+        'other = ChatPromptTemplate.from_template("Answer in {language}.")\n',
+    ),
 }
 
 
