@@ -101,6 +101,32 @@ its change); **claim fidelity** (P0: its SECURITY.md claims vs grader truth);
 committed; unrelated tests still green). Baseline once, then re-run whenever the
 skill or toolkit changes.
 
+## Layer 6 — Format: the conventions the labs' eval suites share
+
+Target: someone who has read τ-bench (Sierra), OpenAI Evals / simple-evals, BIG-bench
+(DeepMind) or an Anthropic eval harness should recognize every file here without
+explanation. The conventions those suites share, and how this repo adopts each:
+
+| Convention | Where it comes from | Here |
+|---|---|---|
+| **Registry**: every eval is a named, versioned entry in a YAML/JSON registry (`id`, `description`, `class`/grader, `args`, `metrics`) | OpenAI Evals `registry/evals/*.yaml`; BIG-bench `task.json` | `evals/registry/<property>.yaml` — `id: security.boundary.v1`, property, task dir, grader, metrics, `version`, `canary` |
+| **Tasks as data, not code**: one record per task with input, expected outcome, metadata; datasets in JSONL/JSON | OpenAI `samples.jsonl` (`input`, `ideal`); τ-bench `tasks.py` (instruction, expected actions, expected outputs); BIG-bench `examples[]` | `evals/cases/<P>/<id>/case.yaml` stays the task record (`id`, `property`, `origin`, `grader`, `expect`, `description`); a generated `evals/registry/tasks.jsonl` flattens all of them for tooling |
+| **Environment / grader split**: the thing being scored never grades itself; graders are small, deterministic, named classes | simple-evals `Eval.__call__(sampler) -> EvalResult`; τ-bench `Env` + reward from final state; Anthropic "grader" | `evals/graders*.py`, one interface; **Phase 7** wraps a case as a τ-bench-style environment: `reset(task)` = a worktree of `vuln/` plus the agent's instruction, `evaluate()` = the property oracle on the final tree (the analogue of τ-bench comparing final DB state) |
+| **Per-sample records + aggregate summary**, both machine-readable, written per run under a run id | OpenAI `evallogs/<run_id>.jsonl` (events then `final_report`); τ-bench `results/*.json` per task with reward | `evals/results/<run_id>/samples.jsonl` (eval_id, task_id, trial, variant, detected, metrics, evidence, elapsed_s) + `summary.json` + `report.md`; `run_id` = timestamp + git sha; `latest/` symlink |
+| **Metrics vocabulary**: `n`, mean, confidence interval, `pass@k` (any of k) and **`pass^k`** (all of k, consistency) for stochastic systems | τ-bench pass^k; OpenAI/Anthropic report CIs with n | detectors: recall, precision, n, Wilson 95% CI; defenses: ASR with CI over trials; agents (Phase 7) and live models (Phase 4): `pass@k` and `pass^k` over k trials, k and seeds recorded |
+| **Eval card**: task, construction, dataset provenance, metrics, baselines, known limitations, contamination policy | BIG-bench README per task; Anthropic/OpenAI eval cards and model-card eval sections | `evals/cards/<property>.md`, generated skeleton + hand-written provenance (which historical miss, which repo, which PR) |
+| **Contamination canary**: a unique string in every dataset file so a model trained on it can be detected | BIG-bench `canary` GUID | one GUID in every `case.yaml` and `tasks.jsonl`, documented in the registry |
+| **Held-out split declared up front**, never used for tuning | every lab suite | `evals/heldout/` sealed (Phase 4); registry marks `split: build|heldout` |
+| **One CLI** with eval selection, trials and output dir | `oaieval <sampler> <eval>`; `tau_bench.run --env --model --num-trials` | `python -m evals run --eval security.egress --trials 1 --out evals/results/` (`--strict`, `--only` kept); `python -m evals list`; `python -m evals card <eval>` |
+| **Baselines in the report**: a trivially vulnerable and a reference-hardened system scored alongside the system under test | τ-bench model table; simple-evals results table | detector evals report the clean twin (precision) next to vuln (recall); defense evals report `stub_target` (raw) next to `hardened_target`; agent evals report a no-op agent and the reference fix |
+
+**Migration (Phase 2.5, after the three corpus PRs land, one PR):** add the registry and
+`tasks.jsonl` generator, switch `run.py` to run-id directories with `samples.jsonl` +
+`summary.json` + CIs, add the canary to every `case.yaml`, generate the card skeletons,
+add the `list`/`card` subcommands. The case directories and graders do not change, so
+corpus work in flight is unaffected. Phase 6 gates then read `summary.json` of the last
+tagged run; Phase 7 implements the environment wrapper and reports `pass^k`.
+
 ---
 
 ## Execution plan
@@ -109,6 +135,7 @@ skill or toolkit changes.
 |---|---|---|---|---|
 | 0 | `EVALS.md`: properties catalog with oracles and thresholds (this plan, finalized) | reviewed; thresholds agreed | me + Victor | — |
 | 1 | `evals/` package: grader interface wrapping existing oracles; `run.py` emitting JSON + Markdown; CI job `evals` wired, **no gates yet** | runs green on the toolkit's own fixtures | me | 0 |
+| 2.5 | Lab-format migration: registry, `tasks.jsonl`, run-id dirs with `samples.jsonl` + `summary.json` + CIs, canary, cards, `list`/`card` CLI (Layer 6) | runs produce the Layer 6 layout; old cases unchanged | me | 2 |
 | 2 | Case corpus v1 — three agents in parallel by property family: (a) P1/P2/P9, (b) P4/P5/P6/P7, (c) P3/P8 — each writes `vuln/clean/case.yaml` sets, **historical misses first** | every historical miss is a case; runner reports recall/precision per class; clean twins all pass | 3 agents, I verify | 1 |
 | 3 | Mutation runner + `mutations.yaml` per repo for every fixed bug | kill rate 100 % on the known-bug set | 1 agent | 1 |
 | 4 | Injection: sealed held-out set; Tier B live-model runner with budget cap; utility set + grader for `job_parser` | Tier A green; Tier B report with CIs at the agreed budget; utility delta ≤ tolerance | me (sealed set), 1 agent (runner) | 1 |
@@ -116,7 +143,7 @@ skill or toolkit changes.
 | 6 | Gates + trends: thresholds from Phases 2–5 baselines, regression gates in CI, trend table | a deliberate regression (a reverted fix) fails the `evals` job | me | 2–5 |
 | 7 | Agent eval harness + first baseline; P0 truthfulness scoring | baseline report; claim-fidelity measured | me + 1 agent | 2, 6 |
 
-Sequencing: 0 → 1 → {2, 3, 4, 5 in parallel} → 6 → 7.
+Sequencing: 0 → 1 → {2, 3, 4, 5 in parallel} → 2.5 → 6 → 7.
 
 ## Two decisions needed before Phase 4 and 7
 
