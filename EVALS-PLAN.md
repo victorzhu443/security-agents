@@ -87,7 +87,11 @@ below the last tagged version, ASR_hardened > 0 on the build corpus, kill rate
 agent evals run on demand with an explicit budget. `evals/results/` is
 committed; a trend table in the README shows the metrics per tag.
 
-## Layer 5 — Evaluating the agent
+## Layer 5 — Evaluating the agents
+
+The agents are artefacts in `agents/` (one per property P1–P9, plus the P0 verifier; PR
+#11). Each is scored on its own property's cases, so the agent eval is a per-agent row,
+not one number, and a change to a spec file shows up as a change in that row.
 
 `evals/agent/`: run the `secure-project` playbook (an agent) against a frozen
 snapshot of the case corpus as if it were a project, then grade: **recall** of
