@@ -585,3 +585,12 @@ Burp Suite / Metasploit remain manual lab exercises.
 **Process lesson recorded:** several agents sharing one git checkout stepped on
 each other's staged files; every later agent worked from an isolated worktree.
 Rule: one worktree per concurrent agent.
+
+## 8. Visibility (2026-11-26)
+
+The toolkit repository was made **public** after the toolkit PRs merged and
+`v0.1.1` was tagged. Consequences: the `TOOLKIT_TOKEN` secret in §2.1/§3.7 and
+`CI-SETUP.md` is optional (anonymous HTTPS installs work); the project repos'
+inline workflows were updated to use the token only when present. The analysis
+documents here name weaknesses in the project repos by file and line; the window
+in which those were public but unmerged closes when the per-repo PRs land.

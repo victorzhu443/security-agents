@@ -1,5 +1,7 @@
 # CI setup — one reusable security workflow for every repo
 
+> **Visibility update (2026-11-26): this repository is now PUBLIC.** The `TOOLKIT_TOKEN` steps below are **optional** — `pip install "security-agents @ git+https://github.com/victorzhu443/security-agents@v0.1.1"` and the reusable workflow both work anonymously. Keep the token steps only if the repo is ever made private again. The project repos' workflows accept the token when present and fall back to anonymous HTTPS when absent.
+
 Every project repo runs the same three jobs (DESIGN.md §2.3): `security-tests`
 (`pytest tests/security`), `sast` (Semgrep with the toolkit's rules, plus bandit)
 and `sca` (`pip-audit --strict`). They live once, in this repo, as
