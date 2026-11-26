@@ -2,7 +2,8 @@ name: security (reusable)
 # The three enforcement jobs every one of Victor's repos runs (DESIGN.md §2.3, §3.7):
 #
 #   security-tests   pytest <tests-path> with the toolkit installed
-#   sast             Semgrep (toolkit rules + p/python + p/secrets + extras, --error) and bandit -ll
+#   sast             Semgrep (toolkit rules + p/python + p/secrets + extras; ERROR/WARNING fail,
+#                    INFO is printed as review aid) and bandit -ll
 #   sca              pip-audit --strict, with accepted risks in audit-ignore.toml (each one expires)
 #
 # A project repo calls it from its own .github/workflows/security.yml (see templates/security.yml):
@@ -44,6 +45,13 @@ on:
         default: "."
       semgrep-extra-configs:
         description: Space-separated extra Semgrep configs, e.g. "p/django p/owasp-top-ten".
+        type: string
+        default: ""
+      semgrep-exclude-rules:
+        description: >-
+          Space-separated Semgrep rule ids to skip (--exclude-rule), for a registry rule the
+          repo has triaged as a whole, e.g. constant-identifier `sqlalchemy.text` sites. Say
+          why in the caller; it replaces a `nosemgrep` on every line.
         type: string
         default: ""
       tests-path:
@@ -176,19 +184,27 @@ jobs:
       # Exact pins so Dependabot (pip ecosystem) can track them; bump here, not in callers.
       - run: python -m pip install --upgrade pip && python -m pip install semgrep==1.136.0 bandit==1.8.6
 
-      - name: Semgrep (toolkit rules + python/secrets packs + extras; any finding fails)
+      # Two passes over the same configs. ERROR and WARNING findings fail the job (--error).
+      # INFO findings are review aids (e.g. the toolkit's untrusted-placeholder-in-prompt-template
+      # rule, which also fires on prompts that are already hardened): the second pass prints
+      # them in the log and never fails.
+      - name: Semgrep (toolkit rules + python/secrets packs + extras; ERROR/WARNING fail)
         env:
           EXTRA_CONFIGS: ${{ inputs.semgrep-extra-configs }}
+          EXCLUDE_RULES: ${{ inputs.semgrep-exclude-rules }}
           SOURCE_DIRS: ${{ inputs.source-dirs }}
         run: |
-          EXTRA=""
-          for c in $EXTRA_CONFIGS; do EXTRA="$EXTRA --config $c"; done
-          semgrep scan \
-            --config "${TOOLKIT_DIR}/semgrep/rules.yml" --config p/python --config p/secrets $EXTRA \
-            --error --metrics off \
-            --exclude "$TOOLKIT_DIR" --exclude .venv --exclude node_modules \
-            --exclude '*.min.js' --exclude '*.lock' \
-            $SOURCE_DIRS
+          set -f   # no globbing: the --exclude patterns below are passed to semgrep verbatim
+          ARGS="--config ${TOOLKIT_DIR}/semgrep/rules.yml --config p/python --config p/secrets"
+          for c in $EXTRA_CONFIGS; do ARGS="$ARGS --config $c"; done
+          for r in $EXCLUDE_RULES; do ARGS="$ARGS --exclude-rule $r"; done
+          ARGS="$ARGS --metrics off --exclude $TOOLKIT_DIR --exclude .venv --exclude node_modules --exclude *.min.js --exclude *.lock"
+          echo "::group::Blocking pass (ERROR, WARNING)"
+          semgrep scan $ARGS --severity ERROR --severity WARNING --error $SOURCE_DIRS
+          echo "::endgroup::"
+          echo "::group::Review aids (INFO; never fatal)"
+          semgrep scan $ARGS --severity INFO $SOURCE_DIRS || echo "::warning::semgrep INFO pass exited non-zero; see the log"
+          echo "::endgroup::"
 
       - name: bandit (medium severity and up fails)
         env:
