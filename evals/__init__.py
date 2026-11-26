@@ -9,3 +9,7 @@ A case passes when the grader detects the violation in `vuln/` (recall) and does
 NOT detect it in `clean/` (precision). Every grader is deterministic; no model
 judges anything.
 """
+
+# NOTE: evals/cases/ is excluded from the repository's own SAST (.semgrepignore,
+# .bandit) because the vuln/ variants are intentionally insecure. The graders
+# scan each case directory explicitly, so coverage of the corpus is unaffected.
