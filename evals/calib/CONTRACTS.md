@@ -99,7 +99,7 @@ commit on your own branch with
 merge; never start docker; never spend money. If a permission is denied, stop and report it;
 do not route around it.
 
-Test command: `/Users/vzhu/Developer/projects/research-replication-agent/.venv/bin/python -m pytest tests/ -q -p no:cacheprovider`
+Test command: `python -m pytest tests/ -q -p no:cacheprovider`
 (Python 3.12.14; pyyaml, pytest, hypothesis, anthropic 1.5.0 are in that venv; nothing else may
 be assumed — `harbor` is NOT in it and must not be installed there). The whole suite must stay
 green (469 + the step-0 contract tests on the governor's branch).

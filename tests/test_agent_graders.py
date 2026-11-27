@@ -175,7 +175,7 @@ def test_secret_shaped_kinds_are_categorical():
 @pytest.mark.parametrize("oracle,expected", [
     ("python -m pytest tests/security/test_fetch.py -q", ["python", "-m", "pytest", "tests/security/test_fetch.py", "-q"]),
     (".venv/bin/python -m pytest tests/security -q", ["python", "-m", "pytest", "tests/security", "-q"]),
-    ("/Users/vzhu/Developer/projects/study-hub/.venv-sec/bin/python -c 'import x'", ["python", "-c", "import x"]),
+    ("<local> -c 'import x'", ["python", "-c", "import x"]),
     ("pytest tests/security -q", ["pytest", "tests/security", "-q"]),
     ("grep -n ALLOWED scripts/safe_http.py", ["grep", "-n", "ALLOWED", "scripts/safe_http.py"]),
     ("test -f scripts/safe_http.py", ["test", "-f", "scripts/safe_http.py"]),
