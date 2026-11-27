@@ -70,6 +70,7 @@ FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
 MAX_TOKENS_PER_TURN = 16000
 JSON_RETRIES = 2                 # re-issue a turn at most twice on unparseable tool JSON
+TRANSIENT_RETRIES = 1            # re-issue a turn once on a timeout / dropped connection
 
 LIST_FILES_MAX_LINES = 400
 GREP_MAX_LINES = 200
@@ -173,7 +174,10 @@ class BudgetGuard:
         return None
 
     def note_usage(self, usage: Usage, cost: float) -> Optional[str]:
-        self.tokens += usage.total
+        # Uncached input + output: cache reads are 10% of the price and re-count the whole
+        # context every turn (the pilot hit 500k 'tokens' in 27 calls at $0.05). The USD cap
+        # is the cost guard; this one bounds the model's actual work.
+        self.tokens += usage.input_tokens + usage.output_tokens
         self.usd += float(cost)
         if self.tokens >= self.max_tokens:
             return f"budget: {self.tokens} tokens (max {self.max_tokens})"
@@ -271,8 +275,8 @@ def tool_definitions() -> List[dict]:
                             "repo": {"type": "string"}, "commit": {"type": "string"},
                             "findings": {"type": "array", "items": {"type": "object", "properties": {
                                 "id": {"type": "string"}, "file": {"type": "string"}, "line": {"type": "integer"},
-                                "evidence": {"type": "string"}, "status": {"type": "string"},
-                                "severity": {"type": "string"}, "pr": {"type": "string"}},
+                                "evidence": {"type": "string"}, "status": {"type": "string", "enum": ["fixed", "open", "accepted-risk"]},
+                                "severity": {"type": "string", "enum": ["high", "medium", "low"]}, "pr": {"type": "string"}},
                                 "required": ["id", "file", "line", "evidence", "status", "severity", "pr"]}},
                             "claims": {"type": "array", "items": {"type": "object", "properties": {
                                 "statement": {"type": "string"}, "oracle": {"type": "string"},
@@ -545,6 +549,16 @@ def preflight_auth(client=None) -> str:
     return page.data[0].id if getattr(page, "data", None) else ""
 
 
+def _transient_error_types():
+    """Timeouts and dropped connections: the SDK retries these for non-streaming calls but a
+    stream that dies mid-way surfaces here; one re-issue of the turn is the honest fix."""
+    try:
+        import anthropic
+    except ImportError:
+        return ()
+    return (anthropic.APITimeoutError, anthropic.APIConnectionError)
+
+
 def _api_error_type():
     try:
         import anthropic
@@ -630,6 +644,7 @@ def run_trial(task: Task, env: Env, *, model: str, budget_usd: float, agent_body
     report: Optional[dict] = None
     turn = 0
     json_retries = 0
+    transient_retries = 0
 
     def finish(stop: str, why: str = "") -> LoopResult:
         say(f"stop={stop} calls={tool_calls} tokens={usage_total.total} usd={cost_total:.4f} {why}".rstrip())
@@ -651,9 +666,17 @@ def run_trial(task: Task, env: Env, *, model: str, budget_usd: float, agent_body
             if json_retries > JSON_RETRIES:
                 return finish(STOP_ERROR, f"unparseable tool JSON on {json_retries} consecutive turns")
             continue
+        except _transient_error_types() as e:
+            transient_retries += 1
+            transcript.append({"turn": turn, "tool": "", "args_summary": {}, "result_chars": 0,
+                               "is_error": True, "result": f"transient {type(e).__name__} (turn re-issued)"})
+            if transient_retries > TRANSIENT_RETRIES:
+                return finish(STOP_ERROR, f"harness: {type(e).__name__}: {redact_secrets(str(e))[:200]}")
+            continue
         except _api_error_type() as e:
             return finish(STOP_ERROR, f"api: {type(e).__name__}: {redact_secrets(str(e))[:300]}")
         json_retries = 0
+        transient_retries = 0
 
         usage = _usage_of(response)
         usage_total.add(usage)
@@ -695,6 +718,7 @@ def run_trial(task: Task, env: Env, *, model: str, budget_usd: float, agent_body
                             "content": text, "is_error": bool(is_error)})
             transcript.append({
                 "turn": turn, "tool": name, "args_summary": _args_summary(args),
+                "path": args.get("path") if isinstance(args, dict) and isinstance(args.get("path"), str) else None,
                 "result_chars": len(text), "is_error": bool(is_error),
                 "result": redact(text[:TRANSCRIPT_RESULT_CHARS]),
                 **({"denial": denial.reason} if denial is not None else {}),

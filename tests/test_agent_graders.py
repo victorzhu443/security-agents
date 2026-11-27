@@ -286,10 +286,10 @@ def test_fix_requires_suite_green_too(tmp_path):
     task = _task(hidden_test=HIDDEN, container_test=HIDDEN_ARGV)
     env = FakeEnv(tmp_path, {tuple(HIDDEN_ARGV): OK, tuple(SUITE_ARGV): FAIL})
     assert FixGrader().grade(_ctx(tmp_path, task=task, env=env)).value == 0.0
-    # and a red hidden test short-circuits: the suite is not run
+    # and a red hidden test short-circuits: rerun once (flake check), then the suite is not run
     env = FakeEnv(tmp_path, {tuple(HIDDEN_ARGV): FAIL, tuple(SUITE_ARGV): OK})
     assert FixGrader().grade(_ctx(tmp_path, task=task, env=env)).value == 0.0
-    assert [c[0] for c in env.calls] == [HIDDEN_ARGV]
+    assert [c[0] for c in env.calls] == [HIDDEN_ARGV, HIDDEN_ARGV]
 
 
 def test_fix_tail_is_bounded(tmp_path):
@@ -444,3 +444,16 @@ def test_scores_passed_requires_all_four():
     assert not Scores().passed
     d = Scores(1.0, 1.0, 1.0, 1.0).to_dict()
     assert d["passed"] is True and d["errors"] == {}
+
+
+def test_fix_grader_reruns_once_and_labels_a_flaky_pass(monkeypatch):
+    from evals.agent import graders as G
+    calls = {"n": 0}
+    def fake_run(self, ctx, label, argv):
+        calls["n"] += 1
+        return (0.0 if calls["n"] == 1 else 1.0), f"[{label}] rc={0 if calls['n']>1 else 1}", None
+    monkeypatch.setattr(G.FixGrader, "_run", fake_run)
+    class T: container_test = ["python", "-m", "pytest", "x"]; hidden_test = "a"; suite_test = "a"
+    class Ctx: task = T(); env = None; report = None; diff = ""
+    r = G.FixGrader().grade(Ctx())
+    assert r.value == 1.0 and "flaky" in r.evidence and calls["n"] == 2
