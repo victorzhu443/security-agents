@@ -1,0 +1,18 @@
+# Training-data cutoffs used for the contamination split (EVALS-PLAN / plan "split.py").
+# A task whose advisory `disclosure_date` is on or before a model's cutoff month is binned
+# `pre` for that model (the fix may be in its training data); after it, `post`; a model
+# listed as `unknown` is binned `unknown` and the card says so.
+#
+# Granularity is a month (YYYY-MM); the last day of that month is the boundary.
+# Sources, 2026-11-27:
+#   claude-fable-5-1   2026-06  — the model's own stated cutoff (Fable 5.1 system card, June 2026)
+#   claude-opus-5-5    2026-06  — claude-api skill, shared/model-migration.md "Knowledge cutoff June 2026"
+#   claude-sonnet-5-5  unknown  — the claude-api skill's model table states no cutoff for it
+#   claude-haiku-5-5   unknown  — same
+# Update a row only with a cited source; never guess a month.
+as_of: "2026-11-27"
+cutoffs:
+  claude-fable-5-1: "2026-06"
+  claude-opus-5-5: "2026-06"
+  claude-sonnet-5-5: unknown
+  claude-haiku-5-5: unknown

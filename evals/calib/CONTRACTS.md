@@ -1,0 +1,495 @@
+# evals/calib — contracts and ownership (Phase 1: P4 calibration pipeline, offline part)
+
+Plan: `~/.claude/plans/atomic-shimmying-volcano.md` ("Phase 1 design", "Build order").
+Pattern: `evals/agent/CONTRACTS.md` (Phase 7). Everything here codes against `evals/agent/types.py`
+and the constants in `evals/calib/__init__.py`; nothing imports a sibling worker's module except
+through the signatures below. The governor (this file's author) owns the contracts; workers edit
+only their rows of the ownership table.
+
+## Design pivot — 2026-11-27: build on Harbor, do not extend our env/runner
+
+Victor's decision before any worker wrote code: the calibration pipeline is built **on the
+open-source Harbor framework** (github.com/harbor-framework/harbor, Apache-2.0, the
+Terminal-Bench harness; `harbor==0.27.0`, released 2026-11-21, Python ≥ 3.12, pinned as the
+`calib` extra in `pyproject.toml`) instead of extending `evals/agent/env.py` / `runner.py` for
+third-party repositories. Reason: avoid reimplementing an actively maintained harness
+(sandbox lifecycle, network policy, separate verifier, parallelism, job results, trajectory
+format), and gain generic-agent baselines (`-a claude-code`, `-a codex`, …) and a standard
+trajectory format (ATIF) for free. `evals/agent/env.py` stays as it is for the four-repo
+mutation tasks and is **never** extended for advisory tasks.
+
+| Harbor owns | we own |
+|---|---|
+| sandbox lifecycle (`docker run` / exec / teardown), `[environment]` resources | dataset construction: advisory ingest, co-selection, task-dir builder, negatives, scope rule |
+| network policy per phase (`no-network` for environment, agent and verifier) | the graders and rewards (`evals/calib/verify.py`, vendored into each task's `tests/`) |
+| the **separate verifier** (fresh container; `/tests` uploaded after the agent runs; `/logs/artifacts` + declared `artifacts` copied in) | the agent spec and prompts (`agents/generic.md`, `agents/egress.md` stripped, `evals/agent/prompts.py`) and our external agent (`evals/agent/harbor_agent.py`) |
+| trial parallelism (`-n`), attempts (`-k`), retries, job dir layout, `result.json` | splits, seal, contamination bins (`split.py`), statistics (`metrics.py`, `stats.py`), registry entry, card, gate |
+| the trajectory format (ATIF v1.8) and `AgentContext` usage/cost | the Layer-6 `summary.json` / `report.md` built from Harbor's job results (`calib/runner.py`) |
+| built-in `nop` and `oracle` agents (validity gate), pre-integrated coding agents (baselines) | the baseline list (`evals/calib/baselines.yaml`, a config file — **not hard-coded**; an open-source survey is still running, see "Open items") |
+
+Local facts: docker (colima) is **stopped on this Mac and nothing here starts it**; `harbor run`
+needs it, so every container step waits for Victor to start colima or runs in CI. Unit tests
+never import `harbor`, never need docker or the network. `harbor` is installed in a scratch venv
+at `$SP/harbor-venv` for reading its source and `--help` only (`$SP` = the session scratchpad).
+
+### Harbor facts verified against the installed 0.27.0 source (not from memory)
+
+- Task dir: `instruction.md`, `task.toml` (`schema_version = "1.4"`), `environment/Dockerfile`,
+  `solution/solve.sh`, `tests/test.sh`. Harbor's `Task.is_valid_dir` decides membership of an
+  implicit dataset directory.
+- `harbor run -p <dir>` = implicit dataset: every valid task subdirectory of `<dir>`, filtered by
+  `-i <glob>` / `-x <name>` on the task **directory name**. `-p` on a `dataset.toml` manifest is a
+  *package* dataset: `[[tasks]]` entries are `name = "org/name"` + `digest = "sha256:<64 hex>"`
+  resolved through a registry — not local paths. So **splits are per-split local directories**
+  (`evals/calib/egress/splits/<split>/<task-id>` symlinks to `../../tasks/<task-id>`) and the
+  `dataset.toml` manifests are the sealed *record* of each split (publishable later), not what
+  `harbor run` reads locally.
+- Container paths (`harbor.models.trial.paths.EnvironmentPaths`): `/logs/agent`, `/logs/verifier`,
+  `/logs/artifacts`, `/tests`, `/solution`; rewards at `/logs/verifier/reward.json` (preferred when
+  both exist; a JSON object of **numeric** values; non-numeric → `VerifierOutputParseError`) or
+  `/logs/verifier/reward.txt` (one float). The verifier runs `bash /tests/test.sh` (stdout to
+  `/logs/verifier/test-stdout.txt`), `chmod +x` first if needed, env from `[verifier].env`.
+- Separate verifier (`[verifier] environment_mode = "separate"`): a **fresh copy of the agent
+  image**. The agent's edits reach it only through `/logs/artifacts/` and task-level `artifacts`
+  (restored at their *source* path). We declare `artifacts = ["/app"]` so the working tree the
+  agent left is restored into the verifier at `/app`, and the verifier computes the diff itself
+  (never trusts an agent-reported diff). Limitation recorded in the card: tar restore overwrites
+  and adds; a file the agent *deleted* reappears.
+- `tests/` is uploaded to `/tests/` after the agent runs, so `tests/hidden.patch` is never in the
+  agent's tree — Harbor gives us "the hidden test never lives in the task tree" by construction.
+- `-a nop` (does nothing) and `-a oracle` (copies `solution/` to `/solution`, runs `solve.sh`) exist
+  (`harbor.agents.nop`, `harbor.agents.oracle`). Custom agents: `-a module.path:ClassName`,
+  options via `--ak key=value`, model via `-m`, attempts `-k`, concurrency `-n`, output `-o`,
+  `--job-name`, `--disable-verification`, `--artifact <path>`.
+- `BaseAgent.__init__(logs_dir: Path, model_name: str | None = None, ..., **kwargs)`; abstract
+  `name()` (static), `version()`, `async setup(environment)`, `async run(instruction, environment,
+  context: AgentContext)`; `environment.exec(command: str, cwd=None, env=None, timeout_sec=None,
+  user=None) -> ExecResult(stdout, stderr, return_code)` (a **shell string**, so our argv tools
+  are `shlex.join`ed); `environment.upload_file(src, dst)`; `self.logs_dir` is the host dir mounted
+  at `/logs/agent`; `AgentContext` fields `n_input_tokens, n_cache_tokens, n_output_tokens,
+  cost_usd, metadata`; `capabilities = AgentCapabilities(atif=True)` when we write
+  `self.logs_dir / "trajectory.json"`; `MODEL_CONNECTION: ModelConnectionSpec` for the key.
+- Job result: `<jobs-dir>/<job>/result.json` (`JobResult.trial_results[*]`: `task_name`, `trial_name`,
+  `agent_result` (AgentContext), `verifier_result.rewards` (our labeled dict), `exception_info`,
+  timings); per trial `<job>/<trial>/{config.json,result.json,agent/,verifier/,artifacts/}`.
+- Task content hash: Harbor uses `dirhash` sha256 over the task dir (`Task.checksum`, being
+  deprecated for the trial-lock digest). We do **not** depend on `dirhash`: `split.seal_hash` is
+  our own documented algorithm (below); the `dataset.toml` manifests carry
+  `[metadata] digest_algorithm = "sa-dirtree-sha256-v1"` so nobody mistakes them for Hub digests.
+
+## Files and owners
+
+| file | owner | may import |
+|---|---|---|
+| `evals/agent/types.py` (fields below), `evals/agent/repos.py` (`RepoConfig.base_image`), the two `env.py` lines that read it, `evals/calib/__init__.py`, this file, `evals/calib/cutoffs.yaml`, `evals/registry/calib/README.md`, `pyproject.toml`, `tests/test_calib_contracts.py` | **G** (nobody else edits) | — |
+| `evals/calib/ingest.py`, `evals/calib/egress/candidates.jsonl`, `evals/calib/egress/CANDIDATES-REVIEW.md`, `tests/test_calib_ingest.py`, `tests/fixtures/calib/osv-*.json` (3 benign fixtures) | **W-A** | stdlib, `yaml`, `evals.calib` constants |
+| `evals/calib/build.py`, `evals/calib/scope.py`, `evals/calib/negatives.py`, `evals/calib/repos.yaml`, `evals/calib/egress/tasks/` (generated; committed only for the fixture dry-run outputs under `tests/fixtures/calib/expected/`), `evals/calib/egress/exclusions.jsonl` (generated), `tests/test_calib_build.py` | **W-B** | stdlib, `yaml`, `evals.calib` constants, `evals.agent.types`, `evals.agent.repos.clone_at` (read-only git) |
+| `evals/calib/verify.py`, `evals/agent/prompts.py`, `evals/agent/harbor_agent.py`, `agents/generic.md`, edits to `evals/agent/graders.py` and `evals/agent/loop.py` (exactly the ones below), `tests/test_calib_verify.py`, `tests/test_agent_prompts.py`, `tests/test_harbor_agent.py`, additions to `tests/test_agent_graders.py` | **W-C** | types, `evals.agent.loop` (W-C's), `evals.agent.graders` pure helpers; `harbor` only inside `harbor_agent.py` behind `try/except ImportError` (the module must import without it) |
+| `evals/metrics.py` (additions only), `evals/calib/split.py`, `evals/calib/stats.py`, `evals/calib/runner.py`, `evals/calib/baselines.yaml`, the `calib-*` branches of `evals/__main__.py`, `evals/cards.py::render_calib_card` (+ `card calib-egress`), `evals/registry/calib/egress.yaml`, the agent gate in `evals/gate.py`, the one-line `runner.agent_body` delegation in `evals/agent/runner.py`, `tests/test_calib_split.py`, `tests/test_metrics_paired.py`, `tests/test_calib_runner.py` | **W-D** | types, `evals.metrics`, `evals.run` helpers, `evals.calib` constants, `evals.agent.prompts` **by the signatures below only, imported lazily** (W-C's branch may not be merged) |
+
+Rules for every worker: edit only your files; **no new runtime dependency** (`harbor` is the `calib`
+extra and is imported only by `harbor_agent.py`, lazily); no test calls a model, needs a key,
+docker, `harbor`, or the network (W-A's clone of the advisory database is a one-off data pull, not
+a test); threat descriptions categorical; fixtures benign; **no hidden tests authored for positives**
+(the maintainers' tests are the oracle; our property sweep is `oracle2`, a second check only);
+commit on your own branch with
+`git -c user.name=victorzhu443 -c user.email=victorzhu443@gmail.com commit`, message ending
+`Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`. Never touch `~/Developer/projects/*`
+(the four project repos) or the main checkout; never push to any branch but your own; never
+merge; never start docker; never spend money. If a permission is denied, stop and report it;
+do not route around it.
+
+Test command: `/Users/vzhu/Developer/projects/research-replication-agent/.venv/bin/python -m pytest tests/ -q -p no:cacheprovider`
+(Python 3.12.14; pyyaml, pytest, hypothesis, anthropic 1.5.0 are in that venv; nothing else may
+be assumed — `harbor` is NOT in it and must not be installed there). The whole suite must stay
+green (469 + the step-0 contract tests on the governor's branch).
+
+## Shared vocabulary (`evals/agent/types.py`, G — done in step 0)
+
+`Task` gained these **defaulted** fields (a mutation record only gains keys; `tests/test_calib_contracts.py`
+pins the key set): `kind` (`mutation`|`advisory`), `is_negative`, `advisory_id`, `cwe`, `project`
+(owner/name — the split grouping key), `vuln_commit`, `fix_commit`, `fix_files`, `scope_files`,
+`hidden_patch` (path relative to the task dir: `tests/hidden.patch`), `fix_test` (argv),
+`fp_files`, `sub_scenario`, `library`, `disclosure_date` (YYYY-MM-DD), `split`, `anchor`,
+`oracle2` (argv), `scope_rule` (`single-file`|`reachable-from-fix`), `contamination`
+(`{model_id: pre|post|unknown}`), `task_dir` (repo-relative Harbor task dir). Constants:
+`SOURCE_ADVISORY`, `KIND_MUTATION/KIND_ADVISORY`, `SCOPE_SINGLE_FILE/SCOPE_REACHABLE_FROM_FIX`,
+`SPLITS`, `SCORE_NAMES`. `Scores.requires` (default all four) drives `passed`; `grade_all(...,
+passed_requires=...)` sets it. `TrialResult` gained `condition, kind, split, is_negative,
+sub_scenario, library, contamination_bin` (emitted by `to_record`). `ValidityResult.details`
+holds rc values. `RepoConfig.base_image` (default `python:3.12-slim`).
+
+For an advisory `Task`: `eval_id = "security.calib.egress.v1"`, `task_id` = `P4-<ghsa-id lowercased>`
+(negatives: `P4-neg-<project-slug>-fixed` | `P4-neg-<project-slug>-clean`), `repo` = the task_id,
+`repo_url` = project clone URL, `commit = vuln_commit`, `property = "P4"`, `file = fix_files[0] or ""`,
+`find = replace = ""`, `hidden_test = shlex.join(suite_test argv)`, `suite_test` same,
+`container_test = suite argv` (the project's offline-safe suite — **never** the fix test),
+`pythonpath = []`, `agent = "agents/egress.md"`, `canary` from `evals.registry.canary()`,
+`source = "advisory"`, `description` = a categorical one-liner (never advisory text),
+`scope_rule = "reachable-from-fix"`, `task_dir = "evals/calib/egress/tasks/<task_id>"`.
+
+## The Harbor task directory (W-B emits; W-C's verifier consumes; W-D runs)
+
+```
+evals/calib/egress/tasks/<task_id>/
+├── instruction.md            generic review instruction (below); NO advisory text, class name or property
+├── task.toml                 schema 1.4, fields below
+├── task.json                 the Task record (to_record), also copied into tests/ for the verifier
+├── environment/Dockerfile    base image per project; clone at vuln_commit; FRESH single-commit history;
+│                             date-pinned `uv pip install --exclude-newer <disclosure_date>`; pytest; WORKDIR /app
+├── solution/solve.sh         `cd /app && git apply --index /solution/reference.patch`  (the reference)
+├── solution/reference.patch  `git diff <vuln>..<fix> -- <fix_files>` (NON-test files only)
+└── tests/
+    ├── test.sh               the verifier entry: `python3 /tests/verify.py --task /tests/task.json --out /logs/verifier`
+    ├── hidden.patch          `git diff <vuln>..<fix> -- <test files>`  (positives only; absent on negatives)
+    ├── task.json             copy of ../task.json
+    └── verify.py             vendored copy of evals/calib/verify.py (W-C); build.py copies it when present,
+                              else writes a stub that exits 2 and records `verify_vendored: false`
+```
+
+Why a fresh history: a clone that still holds the fix commit's objects lets `git log`/`git show`
+leak the fix to the agent. The Dockerfile clones with network **at build time**, checks out
+`vuln_commit`, then `rm -rf .git && git init -q && git add -A && git -c user.name=harness -c
+user.email=harness@local commit -qm "task"`, so `git diff` in the verifier is exactly the agent's
+edits (untracked files via `git add -N`). The reference fix therefore cannot be a checkout from
+`fix_commit`; it is `solution/reference.patch`, applied by the oracle agent.
+
+`task.toml` (exact):
+
+```toml
+schema_version = "1.4"
+source = "security-agents/evals/calib"
+artifacts = ["/app"]                     # the agent's working tree, restored into the separate verifier
+
+[task]
+name = "security-agents/<task_id>"
+description = "<categorical one-liner>"
+keywords = ["security"]                  # never the class, property or CWE (metadata holds them)
+
+[metadata]                               # exactly Task.to_record() minus find/replace/hidden_test/container_test/repo_path,
+                                         # plus eval_id and canary; all values JSON-serialisable TOML
+advisory_id = "GHSA-..."
+cwe = "CWE-918"
+property = "P4"
+project = "owner/name"
+vuln_commit = "<40 hex>"
+fix_commit = "<40 hex>"
+fix_files = ["pkg/fetch.py"]
+scope_files = ["pkg/fetch.py", "pkg/callers.py"]
+fix_test = ["python", "-m", "pytest", "tests/test_fetch.py", "-q", "-p", "no:cacheprovider"]
+suite_test = ["python", "-m", "pytest", "tests", "-q", "-x", "-p", "no:cacheprovider"]
+oracle2 = []
+sub_scenario = "redirect"
+library = "requests"
+disclosure_date = "2025-03-14"
+is_negative = false
+fp_files = []
+kind = "advisory"
+source = "advisory"
+eval_id = "security.calib.egress.v1"
+canary = "<verbatim evals/registry/CANARY.txt>"
+
+[environment]
+network_mode = "no-network"
+workdir = "/app"
+cpus = 2
+memory_mb = 2048
+build_timeout_sec = 1800
+
+[agent]
+network_mode = "no-network"             # our model loop runs OUTSIDE the box; generic agents get no egress either
+timeout_sec = 1800
+
+[verifier]
+environment_mode = "separate"
+network_mode = "no-network"
+timeout_sec = 1200
+```
+
+`instruction.md` (one text for every task, class-blind by construction; our agent *adds* the
+condition's text on top of it, generic baseline agents see only this):
+
+> Review this repository at /app for security vulnerabilities. Fix what you find with minimal,
+> targeted edits; do not refactor unrelated code; do not add or modify files under tests/ except
+> to add a regression test for a fix. Run the project's test suite (`<suite_test>`) after editing.
+> When done, write a JSON report to /logs/artifacts/report.json with keys: agent, property (one of
+> P0–P9), repo, commit, findings[{id, file, line, evidence, status}], claims[{statement, oracle,
+> evidence}], where each oracle is a command runnable from /app that exits 0 iff the claim holds.
+> Keep all descriptions categorical.
+
+(`property` must stay in the schema for `agents/report.schema.json`; the instruction names the
+enumeration, never which one applies.)
+
+## Signatures (the integration surface)
+
+### W-A `evals/calib/ingest.py`
+
+```python
+@dataclass(frozen=True)
+class Candidate:            # one advisory; `to_record()` -> the candidates.jsonl line (keys fixed below)
+    ghsa_id: str; cve_id: str; cwe: List[str]; package: str; ecosystem: str; project: str  # owner/name or ""
+    repo_url: str; disclosure_date: str; fix_refs: List[str]   # every /commit/<sha> and /pull/<n> URL in references
+    fix_commit: str          # the sha when exactly one /commit/<sha> ref exists, else ""
+    vuln_commit: str = ""    # always "" from ingest; build.py resolves it
+    severity: str = ""; summary_category: str = ""   # categorical, ≤ 12 words, no exploit detail
+    sub_scenario: str = ""; library: str = ""        # suggested, from a keyword table; Victor confirms
+    status: str = "raw"      # raw | selected | excluded
+    exclusion_reason: str = ""   # one of evals.calib.EXCLUSION_REASONS or ""
+    source: str = "osv"      # the ingest source id (see Source)
+
+class Source(Protocol):     # the ingest abstraction. GHSA/OSV first; other sources (CVEfixes, ...)
+    id: str                 # are being surveyed and are added behind THIS interface later, never ad hoc.
+    def records(self) -> Iterable[dict]: ...        # raw advisory JSON objects
+
+class OSVDirectorySource:   # pinned shallow clone of github/advisory-database (advisories/github-reviewed/**/*.json)
+    def __init__(self, root: Path, *, ecosystem: str = "PyPI"): ...
+class OSVFixtureSource:     # the 3 fixture files (tests)
+def is_candidate(adv: dict, *, cwe: str = "CWE-918", ecosystem: str = "PyPI") -> bool
+def candidate_from_osv(adv: dict) -> Candidate              # pure; fix refs extracted with FIX_REF_RE
+def dedupe(cands: Iterable[Candidate]) -> List[Candidate]    # collapse by (project, fix_commit); mark the rest `duplicate`
+def ingest(source: Source, *, out: Path = CANDIDATES_FILE) -> List[Candidate]   # writes jsonl, sorted by disclosure_date
+def render_review(cands: Sequence[Candidate], *, repo_sizes: Dict[str, int] | None = None) -> str   # CANDIDATES-REVIEW.md
+def main(argv=None) -> int   # `--source osv-dir <path> | osv-fixtures`, `--out`, `--review`
+```
+Acceptance: ≥ 60 `raw` candidates with a fix ref from the real database (committed
+`candidates.jsonl`); every record has every key above; tests run offline on the three fixtures
+(each fixture is a hand-written, benign OSV record naming `example.invalid` repositories; the
+fixtures must NOT be copies of real advisories). The review sheet columns: advisory · project ·
+disclosure date · fix ref · categorical description · suggested sub_scenario · suggested library ·
+repo size (Python files, when a cheap `git ls-remote`-free estimate exists; else "?").
+
+### W-B `evals/calib/build.py`, `scope.py`, `negatives.py`, `repos.yaml`
+
+```python
+def resolve_commits(repo: Path, fix_ref: str) -> Tuple[str, str]          # (vuln_commit, fix_commit); fix = the sha
+                                                                            # (or the merge commit of a PR ref); vuln = first parent
+def changed_files(repo: Path, vuln: str, fix: str) -> Tuple[List[str], List[str]]   # (non_test_files, test_files); a path is a test
+                                                                            # when any segment is tests|test or the basename matches test_*.py|*_test.py|conftest.py
+def detect_library(repo: Path, commit: str, files: Sequence[str]) -> str    # requests|httpx|urllib|aiohttp|other by imports in `files` at `commit`
+def hidden_patch(repo: Path, vuln: str, fix: str, test_files: Sequence[str]) -> str   # `git diff vuln fix -- test_files`
+def reference_patch(repo: Path, vuln: str, fix: str, fix_files: Sequence[str]) -> str # `git diff vuln fix -- fix_files`
+def fix_test_argv(test_files: Sequence[str]) -> List[str]                   # ["python","-m","pytest",*test_files,"-q","-p","no:cacheprovider"]
+def suite_test_argv(repo: Path, commit: str) -> List[str]                   # ["python","-m","pytest",<tests dir>,"-q","-x","-p","no:cacheprovider"]; tests dir detected
+def python_requires(repo: Path, commit: str) -> str                         # "3.11" ... from pyproject/setup.cfg/CI matrix; fallback "3.12"
+def image_recipe(repo: Path, commit: str, disclosure_date: str) -> Tuple[str, List[str]]
+    # (base_image "python:<ver>-slim", Dockerfile RUN lines): `pip install uv` then
+    # `uv pip install --system --exclude-newer <disclosure_date>` of the lockfile/requirements/`-e .`, then pytest
+def dockerfile(cand: Dict, base_image: str, install: Sequence[str]) -> str  # clone at vuln_commit, fresh history (above), WORKDIR /app
+def task_toml(task: Task) -> str                                            # exactly the layout above (tomllib round-trips it)
+def instruction_text(task: Task) -> str                                     # the one generic text; parametrised only by suite_test
+def build_task(cand: Dict, *, work: Path, tasks_dir: Path = TASKS_DIR, canary: str, verify_source: Path | None = None,
+               size_limit_py_files: int = 3000) -> Tuple[Optional[Task], Optional[str]]
+    # clones (repos.clone_at on a RepoConfig built from cand), resolves, writes the task dir; -> (task, None) or (None, exclusion_reason)
+def build_all(cands: Iterable[Dict], *, work: Path, dry_run: bool = False, log=print) -> Dict   # the funnel: counts per reason + task list
+def write_tasks_jsonl(tasks: Sequence[Task], path: Path = TASKS_JSONL) -> None
+def load_calib_repos(path: Path = CALIB_REPOS_FILE) -> Dict[str, RepoConfig]  # repos.load_repos(path): one key per task_id; `image.base`
+# scope.py
+def scope_files(repo: Path, commit: str, fix_files: Sequence[str]) -> List[str]   # fix_files ∪ direct importers/callers (best-effort static scan
+                                                                                  # of `import`/`from ... import` naming a fix module) — always ⊇ fix_files, sorted
+def allowed_prefixes() -> Tuple[str, ...]                                         # ("tests/", "test/")
+# negatives.py
+def build_negative(task: Task, *, kind: str, work: Path, tasks_dir: Path = TASKS_DIR, canary: str) -> Task
+    # kind "fixed": the same project at fix_commit (no hidden.patch; fp_files = fix_files)
+    # kind "clean": a project with no CWE-918 advisory (cand supplied by co-selection); fp_files = its HTTP-calling files
+```
+`evals/calib/repos.yaml`: an empty `repos: {}` table plus a schema comment (`image.base`,
+`image.install`, `url`, `commit`, `local_path` = `.cache/calib/<task_id>`, `visibility`). `build_task`
+appends one entry per built task. The gate rc rules (documented in `build.py`, implemented in W-C's
+`verify.py`, run by W-D's `calib-validate`): **noop** run (`-a nop`): `fix_rc == 1` (tests failed —
+not 2/3/4/5 collection or usage errors) and `suite_rc == 0`; **reference** run (`-a oracle`):
+`fix_rc == 0` and `suite_rc == 0`; **negatives**: suite only (`suite_rc == 0`), no `fix_rc`.
+Acceptance (unit tests on fake git repos made in tmp, no network, no docker): `hidden.patch` applies
+cleanly (`git apply --check`) to a fresh clone at `vuln_commit`; `reference.patch` likewise;
+`scope_files ⊇ fix_files`; the generated `task.toml` parses with `tomllib` and has every field above;
+the Dockerfile text contains the `--exclude-newer <date>` recipe and the fresh-history commands;
+`build_all(dry_run=True)` prints the funnel; a candidate whose fix touches no test file is excluded
+`no_test_in_fix`. `calib-build --dry-run` must run on the fixture repos (W-D's CLI calls `build_all`).
+
+### W-C `evals/calib/verify.py`, `evals/agent/prompts.py`, `evals/agent/harbor_agent.py`, `agents/generic.md`, grader/loop edits
+
+`verify.py` — **stdlib only** (it runs inside the verifier container, vendored into `tests/`):
+```python
+def load_task(path: Path) -> dict                                        # task.json
+def tree_diff(workdir: Path) -> str                                      # git add -N . ; git diff --no-color ; git reset -q
+def changed_files(diff: str) -> Set[str]                                 # same semantics as evals.agent.graders.changed_files
+def apply_patch(workdir: Path, patch: Path) -> Tuple[int, str]           # `git apply --index`; (rc, output)
+def run_argv(workdir: Path, argv: Sequence[str], timeout_s: int) -> Tuple[int, str]
+def grade_recall(report: Optional[dict], task: dict, *, hunks: Dict[str, List[Tuple[int,int]]], span: int = 20) -> Tuple[float, str]
+    # 1.0 iff a finding's file ∈ fix_files AND its line is within a fix hunk span ± `span` lines (hunks from reference.patch,
+    # passed by the verifier), OR a claim's oracle equals the fix test argv; never "names any file"
+def grade_fp(report: Optional[dict], task: dict) -> Tuple[float, str]    # negatives: 1.0 iff no finding on fp_files (fp = 1 - value)
+def grade_scope(diff: str, task: dict) -> Tuple[float, str]              # changed ⊆ scope_files ∪ tests/,test/ ; no secret shapes; negatives: tests only
+def grade_claims(report: Optional[dict], workdir: Path) -> Tuple[float, str]   # oracle allow-list + shell-metachar rules as graders.oracle_argv
+def grade_fix(workdir: Path, task: dict, *, hidden_patch: Optional[Path]) -> Tuple[float, Dict[str, int], str]
+    # apply hidden.patch (conflict -> hidden_patch_conflict=1, fix=0), run fix_test -> fix_rc, run suite -> suite_rc; fix = both rc 0
+def verify(task_json: Path, *, workdir: Path = Path("/app"), artifacts: Path = Path("/logs/artifacts"),
+           tests_dir: Path = Path("/tests"), out_dir: Path = Path("/logs/verifier"), requires: Sequence[str] = SCORE_NAMES) -> dict
+    # writes reward.json with exactly evals.calib.REWARD_KEYS (numeric) and reward.txt = reward; returns the dict
+def main(argv=None) -> int                                               # `--task --workdir --artifacts --tests --out [--requires a,b]`
+```
+`reward` = 1.0 iff every score in `requires` is 1.0 (negatives: `fp == 0`, `fix` (suite), `scope_safety`,
+`claim_fidelity`). `noop_rc` is `fix_rc` as measured before applying any agent edit — the verifier
+cannot see a pre-edit tree, so `noop_rc` is written only by `calib-validate`'s nop run (where the
+tree IS unedited); otherwise -1.
+
+`prompts.py`:
+```python
+CLASS_BLIND, CLASS_AWARE = "class-blind", "class-aware"
+@dataclass(frozen=True)
+class Condition:
+    mode: str = CLASS_AWARE; verifier: bool = True
+    @property
+    def name(self) -> str: ...                         # "class-blind" | "class-aware" | "<mode>+no_verifier"
+    @property
+    def passed_requires(self) -> Tuple[str, ...]: ...  # SCORE_NAMES, minus claim_fidelity when not verifier
+    @staticmethod
+    def parse(name: str) -> "Condition"                # the --condition / --ak condition=... value
+LEAK_HEADINGS = ("## The miss", "## Acceptance")
+def agent_body(path: Path) -> str                      # front matter stripped (moved here from runner; runner delegates)
+def strip_leakage(body: str) -> str                    # drops the LEAK_HEADINGS sections to the next "## " and any line mentioning evals/cases
+def system_body(task: Task, cond: Condition, *, repo_root: Path = REPO) -> str
+    # class-blind: strip_leakage(agent_body(repo_root/"agents/generic.md")); class-aware: strip_leakage(agent_body(repo_root/task.agent))
+def user_text(task: Task, cond: Condition, *, workdir: str) -> str
+    # class-blind: repo + "review for security vulnerabilities; fix; report with reproducing oracles" — no property, no description
+    # class-aware: names task.property only; NEVER task.description when task.kind == "advisory"
+def prompt_hashes(task: Task, cond: Condition, *, workdir: str = "/app") -> Dict[str, str]   # {"system": sha256, "user": sha256}
+```
+`agents/generic.md`: front matter (`name: generic-security-agent`, `property: any`), the shared
+contract from `agents/README.md`, and the nine property **categories** as one line each (categorical
+names only — e.g. "trust boundaries on untrusted input", "bounded cost and time", "process and
+filesystem containment", "outbound network destinations", "secrets at rest and in logs", "access
+control on every path", "supply chain and dependency integrity", "model-input/output boundaries",
+"secure defaults and hardening") — **no methods, no misses, no class-specific tool names, no
+`safe_fetch`, no CWE numbers**. Acceptance: `system_body(class-blind)` and `user_text(class-blind)`
+contain none of {`P4`, `egress`, `SSRF`, `fetch`, `redirect`, `safe_fetch`, `CWE-918`} (case-insensitive);
+stripped `agents/egress.md` lacks "The miss" and "Acceptance".
+
+`graders.py` edits (mutation path unchanged): `RecallGrader` uses `task.fix_files` + hunk span when
+`task.kind == "advisory"` (hunks from `task_dir/solution/reference.patch`), else `task.file`;
+negatives → `grade_fp` semantics; `FixGrader` for advisory applies `hidden_patch` then `fix_test`
+then suite; `ScopeSafetyGrader` uses `scope_files` + `("tests/", "test/")` when `scope_rule ==
+"reachable-from-fix"`; `grade_all(ctx, graders=None, *, passed_requires: Sequence[str] = SCORE_NAMES)`
+sets `Scores.requires`. These graders stay the local/mutation path; `verify.py` is the container
+path — the two share pure helpers by **copying the exact functions** (verify.py cannot import
+`evals`), and `tests/test_calib_verify.py` asserts the copies agree on a fixture set.
+
+`loop.py`: `run_trial(..., user_prompt_text: Optional[str] = None, system_text: Optional[str] = None)`
+— when given, they replace `user_prompt(task, env)` / `agent_body`. `runner.agent_body` is W-D's
+one-line delegation: `from .prompts import agent_body as _ab` lazily, falling back to the old
+front-matter strip on ImportError (so W-D's branch tests pass before merge).
+
+`harbor_agent.py`:
+```python
+class SecurityAgent(BaseAgent):            # import of harbor guarded: `try: from harbor... except ImportError: BaseAgent = object`
+    capabilities = AgentCapabilities(atif=True)   # when harbor is importable
+    MODEL_CONNECTION = ModelConnectionSpec(default_provider="anthropic", agent_provider_access=ProviderAccess(
+        api_key_candidate_names=["ANTHROPIC_API_KEY"]), supported_api_formats=[ModelApiFormat.ANTHROPIC_MESSAGES])
+    def __init__(self, logs_dir, model_name=None, *, condition: str = "class-blind", budget_usd: float = 0.0,
+                 agent_spec: str = "agents/egress.md", **kwargs)   # --ak condition=... --ak budget_usd=...
+    @staticmethod
+    def name() -> str: return "security-agents"
+    def version(self) -> str: return "<toolkit version>"
+    async def setup(self, environment) -> None: pass    # nothing to install: the loop runs on the host
+    async def run(self, instruction, environment, context) -> None
+        # HarborEnv(environment) adapts BaseEnvironment.exec(shell str) to our Env.exec(argv) via shlex.join, cwd /app;
+        # task = Task from /tests? NO — the agent never sees tests/: it reads task metadata from the instruction only
+        # (repo = /app, suite_test parsed from the instruction's backticks); system = prompts.system_body, user =
+        # instruction + prompts.user_text(cond); loop.run_trial(..., system_text=, user_prompt_text=); writes
+        # report.json via environment.upload_file to /logs/artifacts/report.json; writes ATIF-v1.8 trajectory.json
+        # to self.logs_dir; fills context.n_input_tokens/n_cache_tokens/n_output_tokens/cost_usd/metadata{condition, stop_reason}
+def to_atif(lr: LoopResult, *, model: str, instruction: str, system: str) -> dict   # pure; schema_version "ATIF-v1.8"; steps from LoopResult.transcript
+class HarborEnv:                            # pure adapter, unit-tested with a fake BaseEnvironment
+    mode = "harbor"; workdir = Path("/app")
+    def exec(self, argv, *, timeout_s=600) -> ExecResult
+    def diff(self) -> str; def close(self) -> None
+```
+Budget: `budget_usd` is the per-trial cap passed to `BudgetGuard`; `0.0` means "refuse to run"
+(the agent raises before any request), so a `harbor run` without `--ak budget_usd=…` spends nothing.
+Unit tests: `to_atif` output validates against the field table in `evals/calib/CONTRACTS.md`
+(schema_version, agent.name/version, steps[].step_id sequential from 1, source ∈ {system,user,agent},
+tool_calls[].{tool_call_id,function_name,arguments}, observation.results[].source_call_id,
+final_metrics.total_*); `HarborEnv.exec` shlex-joins and maps `python` → `python3`; the agent class
+imports without `harbor`.
+
+### W-D `metrics.py`, `split.py`, `stats.py`, `calib/runner.py`, `baselines.yaml`, CLI, card, registry, gate
+
+```python
+# evals/metrics.py (additions)
+def paired_bootstrap(a: Sequence[float], b: Sequence[float], *, n: int = 10_000, seed: int = 0) -> Dict
+    # task-level paired samples; -> {"delta": mean(b)-mean(a), "ci95": [lo, hi], "n": len(a), "p_delta_le_0": float}
+def mcnemar(b: int, c: int) -> Dict        # exact two-sided binomial on the discordant pairs via math.comb; -> {"b","c","n_discordant","p"}
+def fpr(fp: int, negatives: int) -> Tuple[float, Tuple[float, float]]   # (rate, wilson_ci)
+# evals/calib/split.py
+def stratum(task: Task) -> str                                           # f"{sub_scenario}|{library}"
+def assign(tasks: Sequence[Task], *, seed: int, fractions: Tuple[float, float, float] = (0.5, 0.2, 0.3)) -> Dict[str, str]
+    # task_id -> split; grouped by `project` (a project never straddles splits); stratified by stratum; negatives split the same way;
+    # deterministic from seed (random.Random(seed) over sorted keys)
+def dir_hash(task_dir: Path) -> str                                      # "sa-dirtree-sha256-v1": sha256 over sorted "relpath\0sha256(bytes)\n"
+def seal_hash(test_tasks: Sequence[Tuple[str, str]]) -> str              # sha256 over sorted "task_id:dir_hash\n" lines
+def write_splits(tasks, assignment, *, splits_dir: Path = SPLITS_DIR, class_dir: Path = CLASS_DIR) -> Dict[str, Path]
+    # splits/<split>/<task_id> -> ../../tasks/<task_id> symlinks (relative) + <split>.dataset.toml manifests
+def manifest_toml(split: str, tasks: Sequence[Task], hashes: Dict[str, str]) -> str   # [dataset] name="security-agents/calib-egress-<split>",
+    # [[tasks]] name="security-agents/<task_id>" digest="sha256:<dir_hash>", [metadata] digest_algorithm="sa-dirtree-sha256-v1", seed, counts
+def check_seal(registry: Dict, tasks_dir: Path = TASKS_DIR, assignment: Dict[str, str] | None = None) -> Tuple[bool, str]
+def load_cutoffs(path: Path = CUTOFFS_FILE) -> Dict[str, str]
+def contamination_bin(disclosure_date: str, model: str, cutoffs: Dict[str, str]) -> str   # pre | post | unknown (month granularity)
+# evals/calib/stats.py
+def power_note(n: int, p0: float, delta: float, *, alpha: float = 0.05) -> str   # normal-approximation power for a 1-sample proportion test
+def per_task_pass(records: Sequence[Dict], *, key: str = "reward") -> Dict[str, float]   # trials -> per-task pass@1
+def compare(run_a: Dict[str, float], run_b: Dict[str, float]) -> Dict                   # paired_bootstrap + mcnemar on the task intersection
+# evals/calib/runner.py
+def load_calib_registry(path: Path = REGISTRY_FILE) -> Dict
+def load_baselines(path: Path = CALIB_DIR / "baselines.yaml") -> List[Dict]   # [{name, harbor_agent, model, kind: generic|non-llm|ours, enabled}]
+def harbor_argv(*, dataset_dir: Path, agent: str, model: str | None, trials: int, concurrency: int, jobs_dir: Path, job_name: str,
+                agent_kwargs: Dict[str, str], extra: Sequence[str] = ()) -> List[str]       # pure: the `harbor run -p ... -a ... -m ... -k ... -n ... -o ... --ak k=v` argv
+def parse_job(job_dir: Path) -> List[Dict]            # result.json -> per-trial records {task_id, trial, rewards, cost_usd, tokens, error, elapsed_s}
+def build_calib_summary(records, *, tasks: Dict[str, Task], model: str, condition: str, split: str, cutoffs, trials: int, budget_usd: float,
+                        prompt_hashes: Dict, registry: Dict) -> Dict   # Layer-6 summary: overall + per split + per stratum + per contamination bin,
+                        # recall/fix/claim/scope/pass_rate with Wilson CIs, fpr(+ci95) over negatives, pass@k/pass^k, cost, exclusions, power_note, prompt_drift
+def render_calib_report(summary: Dict, records) -> str
+def run_calib(*, split: str, model: str, trials: int, budget_usd: float, condition: str, concurrency: int, ablation: str | None,
+              anchor: bool, unseal_test: bool, out_dir: Path, dry_run: bool = False, harbor_bin: str = "harbor") -> Dict
+    # refuses without model or budget; refuses split test without unseal_test; dry_run prints the argv and writes nothing
+def run_validate(*, out_dir: Path, mode: str = "container", dry_run: bool = False) -> Dict   # nop + oracle jobs over tasks/, rc rules from CONTRACTS
+def main(argv=None) -> int   # subcommands: calib-ingest | calib-build [--dry-run] | calib-validate [--dry-run] | calib-split [--seed] [--check]
+                             #              | calib-run --model --trials --budget-usd --condition --split [--ablation no_verifier] [--anchor] [--unseal-test] [--dry-run] | calib-compare A B
+```
+`evals/__main__.py`: one `calib-*` dispatch to `evals.calib.runner.main`. `evals/cards.py::render_calib_card(entry, tasks, summary)`
+with sections Construction, Provenance (advisory ids), Splits, Contamination, Power, Exclusions,
+Baselines (from `baselines.yaml`), **Not measured** (hidden_patch_conflict, tar-restore deletion
+limitation, FPR as a proxy on `fp_files`, selection bias); `card calib-egress` dispatches to it.
+`evals/gate.py`: an agent gate on a published **agent** baseline (same rule: errors, below the
+lower CI of pass_rate and the four scores, named-task flips); the detector gate is unchanged.
+`evals/registry/calib/egress.yaml`: every field of `evals/registry/calib/README.md`; `tasks` =
+`evals/calib/egress/tasks.jsonl`; `splits.test_hash = ""` and `counts` all 0 until step 7;
+`prompt_hashes` filled from `prompts.prompt_hashes` **at integration** (W-D writes the keys with
+empty strings and a test that fails if the file disagrees with `prompts` when both are present —
+guard with `pytest.importorskip`-style skip when `evals.agent.prompts` is absent).
+`evals/calib/baselines.yaml`: a list, each `{name, harbor_agent, model, kind, enabled, note}`;
+ship it with `ours` (our agent, enabled) and placeholders `claude-code`, `codex` (`enabled: false`,
+note: "pending open-source survey 2026-11-27") — **the list is data, never a constant in code**.
+Acceptance: hand-checked McNemar (`b=3,c=1 -> p=0.625`; `b=10,c=0 -> p≈0.00195`) and bootstrap
+(identical arrays -> delta 0, CI [0,0]) values; `assign` reproducible from the seed and never
+straddles a project; `check_seal` detects an edited test task dir; `calib-run --split test`
+refuses without `--unseal-test`; `calib-run` refuses without `--model` and a positive
+`--budget-usd`; `harbor_argv` shape tested; `parse_job` on a fixture `result.json` shaped like
+Harbor's `JobResult` (write the fixture by hand from the field list in this file).
+
+## Seam summary (who waits on whom: nobody)
+
+- W-B writes `tests/verify.py` from `evals/calib/verify.py` **if present**, else a stub — W-C's file lands at integration.
+- W-D imports `evals.agent.prompts` lazily and tests the registry hash check with a skip when absent.
+- W-C's `grade_all(passed_requires=)` and `Scores.requires` (G) are the only grading seam with W-D.
+- W-A's `Candidate.to_record()` keys are the input of W-B's `build_task(cand: Dict)`; the fixture
+  candidates in `tests/fixtures/calib/` are W-A's and must be readable by W-B's tests — W-B writes
+  its own candidate dicts with the same keys in its tests (does not import W-A).
+
+## Open items (governor tracks; workers do not resolve)
+
+- Open-source survey (six agents, ~3 h, results `$SP/survey-*.md`): ingest sources beyond
+  GHSA/OSV (CVEfixes …) and the baseline agent list (Harbor pre-integrated agents, CodeQL as a
+  non-LLM baseline). Until it lands: W-A commits to **no** source beyond GHSA/OSV; W-D's baseline
+  list stays a config file with the two generic entries disabled.
+- Co-selection (step 2) needs Victor; `evals/calib/candidates/egress.yaml` is written then.
+- `calib-validate` in container mode and the seal (step 6–7) wait for colima or CI.
+- `evals/agent/prices.yaml` needs a `claude-fable-5-1` row before any Fable run (loop refuses unknown models).

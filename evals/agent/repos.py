@@ -34,6 +34,7 @@ class RepoConfig:
     visibility: str = "public"
     image_hash_files: List[str] = field(default_factory=list)
     image_install: List[str] = field(default_factory=list)
+    base_image: str = "python:3.12-slim"      # `image.base` in repos.yaml; env.dockerfile/requirements_hash read it
 
 
 def repos_root() -> Path:
@@ -49,7 +50,8 @@ def load_repos(path: Path = REPOS_FILE) -> Dict[str, RepoConfig]:
                                commit=str(r["commit"]), catalogue=r.get("catalogue", "security/mutations.yaml"),
                                visibility=r.get("visibility", "public"),
                                image_hash_files=list(img.get("hash_files", [])),
-                               image_install=list(img.get("install", [])))
+                               image_install=list(img.get("install", [])),
+                               base_image=str(img.get("base", "python:3.12-slim")))
     return out
 
 

@@ -18,6 +18,10 @@ xml = ["defusedxml>=0.7"]        # stronger backend for secprim.safe_xml_fromstr
 fuzz-native = ["atheris>=2.3"]
 # agent-eval harness (evals/agent): the model loop outside the box. Pinned; nothing else.
 agent = ["anthropic==1.5.0"]
+# calibration pipeline (evals/calib): Harbor runs the advisory tasks (sandbox, verifier,
+# trajectories). Pinned release verified on PyPI 2026-11-27 (0.27.0, 2026-11-21); needs
+# Python >= 3.12. Unit tests never import it.
+calib = ["harbor==0.27.0"]
 
 [tool.setuptools]
-packages = ["promptinject", "promptinject.corpus", "fuzzing", "secprim", "evals", "evals.agent"]
+packages = ["promptinject", "promptinject.corpus", "fuzzing", "secprim", "evals", "evals.agent", "evals.calib"]
