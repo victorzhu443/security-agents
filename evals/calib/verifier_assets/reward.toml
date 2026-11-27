@@ -1,0 +1,7 @@
+# Root aggregate: `reward` = 1.0 iff every dimension (recall, fix, claim_fidelity,
+# scope_safety, fp) scores 1.0. The no-verifier ablation does not edit this file: W-D's
+# runner recomputes `passed` from the dimension scores with `passed_requires` minus
+# claim_fidelity (evals/calib/CONTRACTS.md, Scores.requires).
+[[reward]]
+name = "reward"
+aggregation = "all-pass"

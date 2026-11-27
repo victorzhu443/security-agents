@@ -1,0 +1,7 @@
+# fix = 1.0 iff the maintainers' fix test passes (after hidden.patch) AND the project suite
+# stays green. On negatives hidden_test_passes is 1.0 "not-applicable", so fix = suite only.
+[scoring.fix]
+aggregation = "all-pass"
+
+[[reward]]
+aggregation = "all-pass"
