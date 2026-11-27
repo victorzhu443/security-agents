@@ -233,3 +233,73 @@ one agent-eval baseline exists. At that point the claim is not "we hardened it"
 but "we measure detector recall/precision, defense ASR with CIs, test power and
 agent claim-fidelity on every release," which is the form the resume bullet and
 the interview answer should take.
+
+---
+
+## Track A — what "full evaluations" means (the remaining measurement work)
+
+Today: detectors on 54 cases, the agent on 57 real-repo tasks, one Haiku pilot.
+"Full" adds the measurements a lab-grade suite is expected to carry:
+
+1. **Model/trial baselines.** Sonnet 5.5 at k=3 on all 57 tasks, then the Opus 5.5
+   comparison; pass@k, pass^k, and cost per task for each, so "what the cheaper model
+   loses on security work" is a measured number, not a guess. Budget per the schedule
+   (monthly total under $200).
+2. **Live injection tier (Phase 4).** The sealed held-out attack set, raw vs hardened
+   ASR with Wilson intervals, plus a utility check so hardening cannot silently break
+   extraction. Small spend (~$10).
+3. **Human-verified ground truth.** Apply the SWE-bench Verified step to the task set:
+   a human confirms each task is solvable and unambiguous; ambiguous or unsolvable tasks
+   are quarantined. A score only means something on a verified set.
+4. **"Not measured" on every card.** Each eval card names what its oracle cannot see
+   (promoted from grader-gap notes), so no published claim outruns the evidence.
+
+## Phase 8 — Discovery mode: finding vulnerabilities in open-source software
+
+The agent so far answers "did it fix this known planted bug." Discovery mode answers
+"what real issues does this unseen codebase have." The task set here is **open-source
+software the user has lawfully cloned** (or their own repos) — never a host or deployment
+someone else operates.
+
+### Scope and the two hard rules (built into the tool, not just documented)
+
+- **Target = a local clone.** The agent reads and tests code on disk that the user has
+  lawfully obtained. It never connects to, scans, or sends traffic to a live deployment
+  of that software or any third-party host. Pointing it at a URL/host is refused; the
+  target must be a local path, recorded in provenance.
+- **Coordinated disclosure, private by default.** The output is a findings report for the
+  project's own `SECURITY.md` / advisory process, with time to patch before anything is
+  public. The tool never opens a public issue or PR, posts a finding, or emits a working
+  exploit. Each finding carries a minimal reproducing oracle for the maintainer, nothing
+  weaponized. Threat descriptions stay categorical.
+- **Containment is mandatory.** Discovery runs third-party code the user did not write, so
+  it always uses the container backend (Phase 5): read-only root, single writable mount,
+  no network, resource limits. This protects the user's machine; it is not a boundary
+  around the code's own behaviour on its real users.
+
+### Build (depends on Track A: discovery is only credible once claim fidelity is measured and good)
+
+1. **Repo onboarding.** Detect language, test command and dependencies; build the image;
+   confirm the suite runs. Most of `env.py` already does this; generalize it beyond the
+   four known repos and add language/framework detection.
+2. **Open-ended run.** No planted bug: the property agents read the repo and write
+   findings, each with a reproducing oracle. The grader is **claim fidelity** (every
+   claimed finding must reproduce in the container) plus **scope safety** — there is no
+   "recall" without a known answer, which is the honest difference from the eval tasks.
+3. **Triage report.** Findings ranked by property and severity, each with its oracle and a
+   *proposed* patch, written to a private report a human reviews. The agent proposes; a
+   person decides what to disclose and what to change.
+4. **Authorization gate.** The run refuses to start unless the target is a declared local
+   clone (or an owned repo); the declaration and the commit are recorded in provenance.
+5. **Calibration against ground truth.** Before trusting discovery on an unseen repo, run
+   it on repos with *known* historical CVEs (the fix commit is public) and measure how
+   many it rediscovers — a recall number for discovery mode, built from already-public,
+   already-patched issues so nothing undisclosed is involved.
+
+### Definition of done for Phase 8
+
+Discovery mode runs on a lawfully cloned OSS repo in the container, produces a private
+triage report whose every finding reproduces (claim fidelity measured on the calibration
+set), refuses non-local targets, and never emits anything public or weaponized. The claim
+becomes: "the agent rediscovers X% of known-and-patched issues in a calibration set, and
+its findings on a new repo reproduce at rate Y, reported privately to maintainers."
