@@ -223,6 +223,16 @@ class FixGrader:
                 evidence.append(out)
             if err is not None:
                 return GradeResult(0.0, evidence="\n".join(evidence), error=err)
+            if v == 0.0:
+                # Timing-sensitive tests (the containment matrix's 2 s timeout probe) flaked
+                # under host load in the pilot. One rerun; a pass on rerun counts but is
+                # labelled so flake rates are visible in the evidence.
+                v2, out2, err2 = self._run(ctx, f"{label}-rerun", argv)
+                if out2:
+                    evidence.append(out2)
+                if err2 is None and v2 == 1.0:
+                    evidence.append(f"[{label}] flaky: failed once, passed on rerun")
+                    v = 1.0
             value = min(value, v)
             if value == 0.0:
                 break

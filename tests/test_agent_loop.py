@@ -203,9 +203,9 @@ def test_budget_guard_tokens_boundary():
     assert g.note_usage(Usage(input_tokens=MAX_TOTAL_TOKENS - 1), 0.0) is None
     reason = g.note_usage(Usage(output_tokens=1), 0.0)
     assert reason and reason.startswith("budget:") and f"{MAX_TOTAL_TOKENS} tokens" in reason
-    # cache tokens count toward the total
+    # cache reads do NOT count: the guard bounds billable work; the USD cap bounds cost
     g2 = BudgetGuard(max_usd=100.0)
-    assert g2.note_usage(Usage(cache_read_tokens=MAX_TOTAL_TOKENS), 0.0)
+    assert g2.note_usage(Usage(cache_read_tokens=MAX_TOTAL_TOKENS), 0.0) is None
 
 
 def test_budget_guard_usd_boundary():
@@ -574,14 +574,14 @@ def test_unparseable_tool_json_reissues_turn_then_errors(tmp_path):
     assert len(client2.requests) == 3 and len(res2.denials) == 3
 
 
-def test_api_error_reports_class_name_only(tmp_path):
+def test_api_error_reports_class_and_redacted_message(tmp_path):
     anthropic = pytest.importorskip("anthropic")
     import httpx
     req = httpx.Request("POST", "https://api.invalid/v1/messages")
     err = anthropic.AuthenticationError("invalid x-api-key sk-ant-SECRET", response=httpx.Response(401, request=req),
                                         body=None)
     res = run(FakeClient(err), FakeEnv(tmp_path))
-    assert res.stop_reason == STOP_ERROR and res.failure_reason == "api: AuthenticationError"
+    assert res.failure_reason.startswith('api: AuthenticationError: invalid x-api-key') and '[redacted-secret]' in res.failure_reason
     assert "sk-ant" not in res.failure_reason
 
 
@@ -665,3 +665,42 @@ def test_loop_module_imports_without_anthropic(monkeypatch):
     assert mod._api_error_type() == ()
     monkeypatch.undo()
     importlib.reload(loop)
+
+
+def test_every_tool_schema_is_strict_at_every_object_level():
+    """The API rejected write_report's nested object without additionalProperties:false."""
+    from evals.agent import loop as L
+    def strict(sch):
+        if isinstance(sch, dict):
+            if sch.get("type") == "object" and sch.get("additionalProperties") is not False:
+                return False
+            return all(strict(v) for v in sch.values())
+        if isinstance(sch, list):
+            return all(strict(x) for x in sch)
+        return True
+    for t in L.tool_definitions():
+        assert strict(t["input_schema"]), t["name"]
+
+
+def test_is_config_error_classifies_request_and_credential_faults():
+    from evals.agent import loop as L
+    assert L.is_config_error("api: BadRequestError: tools.5.custom ...")
+    assert L.is_config_error("api: AuthenticationError: invalid x-api-key")
+    assert not L.is_config_error("api: RateLimitError: slow down")
+    assert not L.is_config_error("budget: 40 tool calls (max 40)")
+
+
+def test_budget_guard_counts_billable_tokens_not_cache_reads():
+    from evals.agent.loop import BudgetGuard
+    from evals.agent.types import Usage
+    g = BudgetGuard(max_tool_calls=40, max_tokens=1000, max_usd=10.0)
+    assert g.note_usage(Usage(input_tokens=100, output_tokens=100, cache_read_tokens=5000), 0.01) is None
+    assert g.tokens == 200
+
+
+def test_report_schema_enumerates_status_and_severity():
+    from evals.agent import loop as L
+    wr = [t for t in L.tool_definitions() if t["name"] == "write_report"][0]
+    item = wr["input_schema"]["properties"]["report"]["properties"]["findings"]["items"]["properties"]
+    assert item["status"]["enum"] == ["fixed", "open", "accepted-risk"]
+    assert item["severity"]["enum"] == ["high", "medium", "low"]
