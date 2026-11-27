@@ -22,6 +22,8 @@ agent = ["anthropic==1.5.0"]
 # trajectories). Pinned release verified on PyPI 2026-11-27 (0.27.0, 2026-11-21); needs
 # Python >= 3.12. Unit tests never import it.
 calib = ["harbor==0.27.0", "harbor-rewardkit==0.2.4"]
+# test-time statistical oracles only (SURVEY.md §6.21); runtime estimators stay stdlib.
+dev = ["scipy>=1.11", "statsmodels>=0.14"]
 
 [tool.setuptools]
 packages = ["promptinject", "promptinject.corpus", "fuzzing", "secprim", "evals", "evals.agent", "evals.calib"]

@@ -657,3 +657,46 @@ of runner + baselines (W-D documents it in `runner.py`'s docstring; nobody runs 
 `harbor-rewardkit==0.2.4`. The ownership table above is amended by A1 (`verifier_assets/` → W-C),
 A4 (`sast.py` → W-D; `SastAgent` → W-C; `sast_tools` option → W-B). W-A's `ingest.py` gains
 `OSVZipSource` and the GitHub-API PR resolution (A3). All survey holds are lifted.
+
+### A7. From SURVEY.md §6 (merged in PR #24; authoritative where it differs from the messages above)
+
+- **Score shape and the unscored state (§6.10).** RewardKit fixes `reward.json` to `{dimension: number}`,
+  so Inspect's `Score` shape lives in OUR per-trial record (W-D `parse_job` → `samples.jsonl`):
+  `value` (the rewards dict), `answer` (report findings count / files), `explanation` (per-criterion
+  reasoning joined), `metadata` (rc values, backend, agent version), and `unscored: bool` with
+  `unscored_reason ∈ {verifier_timeout, sandbox_failure, output_truncated, missing_rewards, agent_exception}`.
+  **Unscored trials are excluded from every metric and counted separately** (`n_unscored` next to `n`).
+  Criteria (W-C) classify their own failures: a hung or killed test returns `{"score": 0.0,
+  "reasoning": "unscored:verifier_timeout rc=124"}` / `"unscored:output_truncated"`; W-D treats any
+  reasoning starting with `unscored:` as unscored for that trial. A hung test is never a miss.
+- **Property-based second check (§6.11).** `oracle2` = a Hypothesis property test of the proposed
+  URL/host validator (generated host spellings and schemes) is a *fix-grader* second check, never a
+  detector. Deferred to step 6 (needs `hypothesis` in the image); Phase 1 offline leaves `oracle2 = []`.
+- **Negative-control ratio (§6.12).** CASTLE's precedent is 6 vulnerable : 4 clean per class with FP
+  penalised. Co-selection (step 2, Victor) decides the Phase 1 ratio; the review sheet's legend
+  records the precedent; the plan's "~50 positives, 10 negatives" is the floor, not the target.
+- **Rubric (§6.13).** Two raters when available; keep ≤ 1, drop at ≥ 2 on either axis. Confirm the
+  SWE-bench Verified dataset-card license before copying any sample text (none is copied now).
+- **Statistics (§6.21–23).** Runtime estimators stay stdlib. `pyproject.toml` gains a `dev` extra
+  (`scipy>=1.11`, `statsmodels>=0.14`) used only as test-time oracles: W-D's `tests/test_metrics_paired.py`
+  compares `wilson_ci` to `proportion_confint(method="wilson")`, `mcnemar` to `statsmodels…mcnemar(exact=True)`
+  and the binomial p to `binomtest`, guarded by `pytest.importorskip` (the shared venv lacks both; the
+  hand-checked values remain the always-on tests). Every block ships `_ci95` siblings (already) and a
+  `stderr` clustered by task; `grouped` blocks by split / condition / contamination bin. The card's
+  **Not measured** says the SAST baseline scores have no external comparison on any Python SSRF benchmark.
+- **Cards (§6.24).** `render_calib_card` uses the Hugging Face dataset-card headings (Dataset Summary,
+  Supported Tasks, Languages, Dataset Structure, Dataset Creation [Curation Rationale, Source Data,
+  Annotations], Considerations [Social Impact, Biases, Limitations], Additional Information
+  [Licensing, Citation]) plus our Splits, Contamination, Power (Miller 2024 formula; K-trials rule),
+  Exclusions, Baselines, Not measured.
+- **Images (§6.5, 6.7, 6.18).** Pin digests, not tags: `dockerfile(..., base_digest=None)` emits
+  `FROM python:<minor>-slim@sha256:<digest>` when `evals/calib/repos.yaml` carries one for the base
+  (resolved once with network by `calib-build --resolve-digests`, W-D flag → W-B hook), else the tag,
+  and records `base_image_digest` in metadata. EOL slim tags: when the chosen minor is < 3.11 emit the
+  `deb.debian.org → archive.debian.org` sources fix before any apt line. Legacy `setup.py` installs
+  that uv refuses fall back to `pypi-timemachine` (recorded as `install_mode: timemachine`).
+- **ATIF validation (§6.17).** W-C validates a sample `trajectory.json` once, manually, with the
+  scratch venv (`$SP/harbor-venv/bin/python -m harbor.utils.trajectory_validator <file>`) and reports
+  the output; it is not a unit test (harbor is not in the test venv).
+- **Prompt conditions (§6.15).** `openhands-sdk` (not `openhands`) is the heavyweight generic baseline
+  name in `baselines.yaml`; Aider is dropped.
