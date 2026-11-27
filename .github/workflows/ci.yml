@@ -20,7 +20,7 @@ jobs:
       requirements: ""
       install-cmd: pip install -e ".[fetch]"     # runtime deps only; semgrep is a CI tool, not shipped
       # Real source only: evals/cases is intentionally vulnerable (see .semgrepignore).
-      source-dirs: "secprim promptinject fuzzing evals/graders.py evals/run.py evals/registry.py evals/metrics.py evals/cards.py evals/__main__.py"
+      source-dirs: "secprim promptinject fuzzing evals/graders.py evals/run.py evals/registry.py evals/metrics.py evals/cards.py evals/gate.py evals/__main__.py"
       tests-path: tests
       # B314: secprim.bounded.safe_xml_fromstring is the wrapper that makes
       # ElementTree safe (size ceilings, defusedxml via the `xml` extra); bandit
@@ -40,9 +40,11 @@ jobs:
       - name: evals/registry/tasks.jsonl is fresh relative to the case dirs
         run: python -m evals build-tasks --check
 
-  # EVALS-PLAN.md Phase 1 + 2.5: run the eval corpus in the Layer 6 layout and publish
-  # the run directory (samples.jsonl, summary.json with Wilson CIs, report.md). No
-  # gates yet; Phase 6 adds regression gates reading summary.json of the previous tag.
+  # EVALS-PLAN.md Layer 4 (Phase 6): run the eval corpus in the Layer 6 layout, then gate
+  # it against the last published baseline (evals/baselines/latest.json). The gate fails
+  # on a grader error, on recall or precision below the baseline's lower Wilson bound, or
+  # on any task that passed in the baseline and fails now (evals/gate.py). The run
+  # directory (samples.jsonl, summary.json, report.md) is uploaded whatever the verdict.
   evals:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -52,7 +54,12 @@ jobs:
         with: { python-version: "3.11" }
       - run: pip install -e ".[fetch]" semgrep==1.136.0
       - name: Run evals (recall / precision with CIs per eval)
+        id: run
         run: python -m evals run --strict
+      - name: Gate against the latest published baseline (exit 1 regression, 2 could not evaluate)
+        # Runs after a red --strict too, so the log names the regressed tasks.
+        if: steps.run.outcome == 'success' || steps.run.outcome == 'failure'
+        run: python -m evals gate --against latest
       - name: Name the run directory for the artifact
         if: always()
         run: echo "RUN_DIR=evals/results/$(python -c 'import json;print(json.load(open("evals/results/latest.json"))["run_id"])')" >> "$GITHUB_ENV"

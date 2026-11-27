@@ -20,5 +20,7 @@ jobs:
       # install-cmd: ""                       # e.g. pip install -e ".[dev]"
       # bandit-skips: ""                      # e.g. "B314", with the reason in a comment here
       # audit-ignore: audit-ignore.toml       # accepted risks, each with an expiry
+      # mutations: true                       # opt-in 4th job: every entry of security/mutations.yaml
+                                              # must turn tests/security red (kill rate 100 %); see CI-SETUP.md §9
     secrets:
       TOOLKIT_TOKEN: ${{ secrets.TOOLKIT_TOKEN }}   # the name all four repos use; see CI-SETUP.md §4

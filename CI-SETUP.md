@@ -109,6 +109,7 @@ Then fill `with:` in `security.yml`. Inputs (all optional):
 | `install-cmd` | `""` | replaces `pip install -r <requirements>` for the tests; when `requirements` is empty, also builds the environment `sca` audits |
 | `bandit-skips` | `""` | bandit test ids to skip, with the reason in a comment |
 | `audit-ignore` | `"audit-ignore.toml"` | accepted-risk list (section 6) |
+| `mutations` | `false` | opt-in fourth job `mutation-gate`: every entry of `security/mutations.yaml` must be killed (section 9) |
 
 Secret: `TOOLKIT_TOKEN`. In `dependabot.yml`, delete the `npm` block in a repo with
 no `package.json`, or point its `directory` at the frontend folder. Keep the group
@@ -142,7 +143,8 @@ Starting points per repo, matching what each repo's draft `security.yml` does to
 | firstplay-backend (3.11 in CI and prod; `requires-python` says 3.9 but nothing runs there) | `python-version: "3.11"`, `requirements: requirements.txt`, `install-cmd: pip install -r requirements.txt -r requirements-dev.txt` (the tests need `pytest-asyncio` and `reportlab` from the dev file; `sca` still audits `requirements.txt` alone), `semgrep-extra-configs: "p/owasp-top-ten"` plus the framework pack |
 
 Commit, push, and watch the first run (`gh run watch -R victorzhu443/<repo>`). Three
-jobs appear under `security /`: `security-tests`, `sast`, `sca`.
+jobs appear under `security /`: `security-tests`, `sast`, `sca` (a fourth,
+`mutation-gate`, with `mutations: true`; section 9).
 
 What fails `sast`, by Semgrep severity: **ERROR and WARNING findings fail the job**;
 **INFO findings never do**. INFO rules are review aids: they mark places a reviewer
@@ -193,3 +195,37 @@ The repo is private for now because ROOT-CAUSES.md and DESIGN.md describe concre
 unfixed weaknesses in the apps, with file and line. Making it public is right once the
 fixes those documents plan have merged in each repo; until then the PAT is the cost of
 keeping the findings off the public record.
+
+## 9. Mutation gate (opt-in): `mutations: true`
+
+The three jobs above ask whether the code is clean *now*. The mutation gate asks whether
+the tests would notice if a fixed security bug came back (EVALS-PLAN.md Layer 4: kill
+rate below 100 % on the known-bug set fails). It is the toolkit's `evals/mutate.py` run
+in the caller repo: for each entry of `security/mutations.yaml` it reverts that one fix
+in a throwaway `git worktree`, runs the security tests there, and expects them to go
+red. A mutation whose tests stay green is a *survivor*: a hole in the regression net,
+and the job fails on it (`--strict`), as it does on a mutation that cannot be applied.
+
+Turn it on in the caller:
+
+```yaml
+    with:
+      mutations: true
+```
+
+and keep `security/mutations.yaml` next to the tests (schema and mechanics in the
+docstring of `evals/mutate.py`; the `mutation-*.md` tables under `evals/results/` are
+examples of the output). Without the file the job prints a notice and passes, so the
+input can be switched on before the first mutation is written.
+
+Two things the job does for you. It installs the project exactly as `security-tests`
+does (`install-cmd` / `requirements`, then `tests-env`). And because `test:` commands
+usually name the repo's own interpreter (`.venv/bin/python -m pytest tests/security -q`),
+which the runner resolves against the repo and refuses to guess, the job creates `.venv`
+as a virtualenv over the job's Python (`--system-site-packages`, so it sees everything
+just installed) when the repo has none. A `test:` line that says `python -m pytest …`
+works too. The JSON and Markdown results are uploaded as the `mutation-gate` artifact.
+
+Each mutation runs the full security suite, so the job takes
+`(mutations + 1) × suite time`; it is opt-in for that reason, and the toolkit's own repo
+does not run it (it has no project fixes to revert).

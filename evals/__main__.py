@@ -4,6 +4,9 @@
     python -m evals list                       # evals, case counts, graders
     python -m evals card <name> [--write]      # eval card (--all for every one)
     python -m evals build-tasks [--check]      # regenerate evals/registry/tasks.jsonl
+    python -m evals baseline publish [--label vX.Y.Z]   # commit the last run as a baseline
+    python -m evals baseline list | trends     # published baselines; regenerate TRENDS.md
+    python -m evals gate [--against latest|<label>]     # regression gate: exit 0 / 1 / 2
 """
 from __future__ import annotations
 
@@ -76,6 +79,12 @@ def main(argv=None) -> int:
         return card_main(rest)
     if cmd == "build-tasks":
         return cmd_build_tasks(rest)
+    if cmd == "baseline":
+        from .gate import baseline_main
+        return baseline_main(rest)
+    if cmd == "gate":
+        from .gate import gate_main
+        return gate_main(rest)
     print(f"unknown command {cmd!r}\n\n{USAGE.strip()}", file=sys.stderr)
     return 2
 
