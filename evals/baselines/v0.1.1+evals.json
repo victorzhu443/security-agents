@@ -1,0 +1,625 @@
+{
+ "schema": 1,
+ "label": "v0.1.1+evals",
+ "published": "2026-11-26",
+ "run_id": "20261126T211503Z-5247b50",
+ "git_sha": "5247b50",
+ "toolkit_version": "0.1.1",
+ "generated": "2026-11-26T21:15:51.406253+00:00",
+ "trials": 1,
+ "evals_selected": [
+  "security.access.v1",
+  "security.boundary.v1",
+  "security.containment.v1",
+  "security.cost.v1",
+  "security.defaults.v1",
+  "security.egress.v1",
+  "security.llmsep.v1",
+  "security.secrets.v1",
+  "security.supply.v1"
+ ],
+ "overall": {
+  "n": 54,
+  "tasks": 54,
+  "cases": 54,
+  "recall_hits": 54,
+  "precision_hits": 54,
+  "recall": 1.0,
+  "recall_ci95": [
+   0.934,
+   1.0
+  ],
+  "precision": 1.0,
+  "precision_ci95": [
+   0.934,
+   1.0
+  ],
+  "passed": 54,
+  "errors": 0,
+  "historical_misses": 24
+ },
+ "evals": {
+  "security.access.v1": {
+   "property": "P6",
+   "name": "access",
+   "split": "build",
+   "n": 5,
+   "tasks": 5,
+   "recall_hits": 5,
+   "precision_hits": 5,
+   "recall": 1.0,
+   "recall_ci95": [
+    0.566,
+    1.0
+   ],
+   "precision": 1.0,
+   "precision_ci95": [
+    0.566,
+    1.0
+   ],
+   "passed": 5,
+   "errors": 0,
+   "historical_misses": 2
+  },
+  "security.boundary.v1": {
+   "property": "P1",
+   "name": "boundary",
+   "split": "build",
+   "n": 5,
+   "tasks": 5,
+   "recall_hits": 5,
+   "precision_hits": 5,
+   "recall": 1.0,
+   "recall_ci95": [
+    0.566,
+    1.0
+   ],
+   "precision": 1.0,
+   "precision_ci95": [
+    0.566,
+    1.0
+   ],
+   "passed": 5,
+   "errors": 0,
+   "historical_misses": 3
+  },
+  "security.containment.v1": {
+   "property": "P3",
+   "name": "containment",
+   "split": "build",
+   "n": 6,
+   "tasks": 6,
+   "recall_hits": 6,
+   "precision_hits": 6,
+   "recall": 1.0,
+   "recall_ci95": [
+    0.61,
+    1.0
+   ],
+   "precision": 1.0,
+   "precision_ci95": [
+    0.61,
+    1.0
+   ],
+   "passed": 6,
+   "errors": 0,
+   "historical_misses": 2
+  },
+  "security.cost.v1": {
+   "property": "P2",
+   "name": "cost",
+   "split": "build",
+   "n": 7,
+   "tasks": 7,
+   "recall_hits": 7,
+   "precision_hits": 7,
+   "recall": 1.0,
+   "recall_ci95": [
+    0.646,
+    1.0
+   ],
+   "precision": 1.0,
+   "precision_ci95": [
+    0.646,
+    1.0
+   ],
+   "passed": 7,
+   "errors": 0,
+   "historical_misses": 6
+  },
+  "security.defaults.v1": {
+   "property": "P9",
+   "name": "defaults",
+   "split": "build",
+   "n": 6,
+   "tasks": 6,
+   "recall_hits": 6,
+   "precision_hits": 6,
+   "recall": 1.0,
+   "recall_ci95": [
+    0.61,
+    1.0
+   ],
+   "precision": 1.0,
+   "precision_ci95": [
+    0.61,
+    1.0
+   ],
+   "passed": 6,
+   "errors": 0,
+   "historical_misses": 0
+  },
+  "security.egress.v1": {
+   "property": "P4",
+   "name": "egress",
+   "split": "build",
+   "n": 5,
+   "tasks": 5,
+   "recall_hits": 5,
+   "precision_hits": 5,
+   "recall": 1.0,
+   "recall_ci95": [
+    0.566,
+    1.0
+   ],
+   "precision": 1.0,
+   "precision_ci95": [
+    0.566,
+    1.0
+   ],
+   "passed": 5,
+   "errors": 0,
+   "historical_misses": 3
+  },
+  "security.llmsep.v1": {
+   "property": "P8",
+   "name": "llmsep",
+   "split": "build",
+   "n": 10,
+   "tasks": 10,
+   "recall_hits": 10,
+   "precision_hits": 10,
+   "recall": 1.0,
+   "recall_ci95": [
+    0.722,
+    1.0
+   ],
+   "precision": 1.0,
+   "precision_ci95": [
+    0.722,
+    1.0
+   ],
+   "passed": 10,
+   "errors": 0,
+   "historical_misses": 3
+  },
+  "security.secrets.v1": {
+   "property": "P5",
+   "name": "secrets",
+   "split": "build",
+   "n": 5,
+   "tasks": 5,
+   "recall_hits": 5,
+   "precision_hits": 5,
+   "recall": 1.0,
+   "recall_ci95": [
+    0.566,
+    1.0
+   ],
+   "precision": 1.0,
+   "precision_ci95": [
+    0.566,
+    1.0
+   ],
+   "passed": 5,
+   "errors": 0,
+   "historical_misses": 2
+  },
+  "security.supply.v1": {
+   "property": "P7",
+   "name": "supply",
+   "split": "build",
+   "n": 5,
+   "tasks": 5,
+   "recall_hits": 5,
+   "precision_hits": 5,
+   "recall": 1.0,
+   "recall_ci95": [
+    0.566,
+    1.0
+   ],
+   "precision": 1.0,
+   "precision_ci95": [
+    0.566,
+    1.0
+   ],
+   "passed": 5,
+   "errors": 0,
+   "historical_misses": 3
+  }
+ },
+ "tasks": {
+  "P1-dict-field-string-01": {
+   "eval_id": "security.boundary.v1",
+   "property": "P1",
+   "origin": "derived",
+   "passed": true,
+   "error": null
+  },
+  "P1-list-element-method-01": {
+   "eval_id": "security.boundary.v1",
+   "property": "P1",
+   "origin": "derived",
+   "passed": true,
+   "error": null
+  },
+  "P1-nonfinite-float-01": {
+   "eval_id": "security.boundary.v1",
+   "property": "P1",
+   "origin": "historical-miss",
+   "passed": true,
+   "error": null
+  },
+  "P1-option-node-shape-01": {
+   "eval_id": "security.boundary.v1",
+   "property": "P1",
+   "origin": "historical-miss",
+   "passed": true,
+   "error": null
+  },
+  "P1-path-from-content-01": {
+   "eval_id": "security.boundary.v1",
+   "property": "P1",
+   "origin": "historical-miss",
+   "passed": true,
+   "error": null
+  },
+  "P2-html-no-cap-01": {
+   "eval_id": "security.cost.v1",
+   "property": "P2",
+   "origin": "historical-miss",
+   "passed": true,
+   "error": null
+  },
+  "P2-html-strip-quadratic-01": {
+   "eval_id": "security.cost.v1",
+   "property": "P2",
+   "origin": "historical-miss",
+   "passed": true,
+   "error": null
+  },
+  "P2-nested-quantifier-regex-01": {
+   "eval_id": "security.cost.v1",
+   "property": "P2",
+   "origin": "derived",
+   "passed": true,
+   "error": null
+  },
+  "P2-read-before-size-check-01": {
+   "eval_id": "security.cost.v1",
+   "property": "P2",
+   "origin": "historical-miss",
+   "passed": true,
+   "error": null
+  },
+  "P2-redact-header-regex-01": {
+   "eval_id": "security.cost.v1",
+   "property": "P2",
+   "origin": "historical-miss",
+   "passed": true,
+   "error": null
+  },
+  "P2-xml-dtd-01": {
+   "eval_id": "security.cost.v1",
+   "property": "P2",
+   "origin": "historical-miss",
+   "passed": true,
+   "error": null
+  },
+  "P2-zip-no-budget-01": {
+   "eval_id": "security.cost.v1",
+   "property": "P2",
+   "origin": "historical-miss",
+   "passed": true,
+   "error": null
+  },
+  "P3-env-inherited-01": {
+   "eval_id": "security.containment.v1",
+   "property": "P3",
+   "origin": "derived",
+   "passed": true,
+   "error": null
+  },
+  "P3-inprocess-exec-01": {
+   "eval_id": "security.containment.v1",
+   "property": "P3",
+   "origin": "derived",
+   "passed": true,
+   "error": null
+  },
+  "P3-inprocess-exec-from-file-01": {
+   "eval_id": "security.containment.v1",
+   "property": "P3",
+   "origin": "derived",
+   "passed": true,
+   "error": null
+  },
+  "P3-inprocess-import-01": {
+   "eval_id": "security.containment.v1",
+   "property": "P3",
+   "origin": "historical-miss",
+   "passed": true,
+   "error": null
+  },
+  "P3-no-cwd-01": {
+   "eval_id": "security.containment.v1",
+   "property": "P3",
+   "origin": "derived",
+   "passed": true,
+   "error": null
+  },
+  "P3-sandbox-bypass-01": {
+   "eval_id": "security.containment.v1",
+   "property": "P3",
+   "origin": "historical-miss",
+   "passed": true,
+   "error": null
+  },
+  "P4-content-derived-url-01": {
+   "eval_id": "security.egress.v1",
+   "property": "P4",
+   "origin": "historical-miss",
+   "passed": true,
+   "error": null
+  },
+  "P4-cron-sibling-raw-client-01": {
+   "eval_id": "security.egress.v1",
+   "property": "P4",
+   "origin": "historical-miss",
+   "passed": true,
+   "error": null
+  },
+  "P4-dns-rebinding-01": {
+   "eval_id": "security.egress.v1",
+   "property": "P4",
+   "origin": "derived",
+   "passed": true,
+   "error": null
+  },
+  "P4-off-list-uncapped-01": {
+   "eval_id": "security.egress.v1",
+   "property": "P4",
+   "origin": "derived",
+   "passed": true,
+   "error": null
+  },
+  "P4-redirect-to-loopback-01": {
+   "eval_id": "security.egress.v1",
+   "property": "P4",
+   "origin": "historical-miss",
+   "passed": true,
+   "error": null
+  },
+  "P5-debug-from-not-production-01": {
+   "eval_id": "security.secrets.v1",
+   "property": "P5",
+   "origin": "derived",
+   "passed": true,
+   "error": null
+  },
+  "P5-env-fail-open-staging-01": {
+   "eval_id": "security.secrets.v1",
+   "property": "P5",
+   "origin": "historical-miss",
+   "passed": true,
+   "error": null
+  },
+  "P5-hardcoded-secret-01": {
+   "eval_id": "security.secrets.v1",
+   "property": "P5",
+   "origin": "derived",
+   "passed": true,
+   "error": null
+  },
+  "P5-session-file-mode-01": {
+   "eval_id": "security.secrets.v1",
+   "property": "P5",
+   "origin": "historical-miss",
+   "passed": true,
+   "error": null
+  },
+  "P5-session-file-mode-02": {
+   "eval_id": "security.secrets.v1",
+   "property": "P5",
+   "origin": "derived",
+   "passed": true,
+   "error": null
+  },
+  "P6-limiter-success-path-only-01": {
+   "eval_id": "security.access.v1",
+   "property": "P6",
+   "origin": "historical-miss",
+   "passed": true,
+   "error": null
+  },
+  "P6-missing-gate-sibling-route-01": {
+   "eval_id": "security.access.v1",
+   "property": "P6",
+   "origin": "derived",
+   "passed": true,
+   "error": null
+  },
+  "P6-reflected-origin-cors-02": {
+   "eval_id": "security.access.v1",
+   "property": "P6",
+   "origin": "derived",
+   "passed": true,
+   "error": null
+  },
+  "P6-token-equality-compare-01": {
+   "eval_id": "security.access.v1",
+   "property": "P6",
+   "origin": "historical-miss",
+   "passed": true,
+   "error": null
+  },
+  "P6-wildcard-cors-01": {
+   "eval_id": "security.access.v1",
+   "property": "P6",
+   "origin": "derived",
+   "passed": true,
+   "error": null
+  },
+  "P7-dependabot-no-cooldown-01": {
+   "eval_id": "security.supply.v1",
+   "property": "P7",
+   "origin": "historical-miss",
+   "passed": true,
+   "error": null
+  },
+  "P7-known-vuln-pin-01": {
+   "eval_id": "security.supply.v1",
+   "property": "P7",
+   "origin": "historical-miss",
+   "passed": true,
+   "error": null
+  },
+  "P7-known-vuln-range-02": {
+   "eval_id": "security.supply.v1",
+   "property": "P7",
+   "origin": "derived",
+   "passed": true,
+   "error": null
+  },
+  "P7-mutable-action-tag-01": {
+   "eval_id": "security.supply.v1",
+   "property": "P7",
+   "origin": "historical-miss",
+   "passed": true,
+   "error": null
+  },
+  "P7-mutable-reusable-workflow-02": {
+   "eval_id": "security.supply.v1",
+   "property": "P7",
+   "origin": "derived",
+   "passed": true,
+   "error": null
+  },
+  "P8-fstring-content-sink-01": {
+   "eval_id": "security.llmsep.v1",
+   "property": "P8",
+   "origin": "historical-miss",
+   "passed": true,
+   "error": null
+  },
+  "P8-humanmessage-fstring-01": {
+   "eval_id": "security.llmsep.v1",
+   "property": "P8",
+   "origin": "derived",
+   "passed": true,
+   "error": null
+  },
+  "P8-langchain-format-messages-01": {
+   "eval_id": "security.llmsep.v1",
+   "property": "P8",
+   "origin": "derived",
+   "passed": true,
+   "error": null
+  },
+  "P8-langchain-indirect-bind-01": {
+   "eval_id": "security.llmsep.v1",
+   "property": "P8",
+   "origin": "derived",
+   "passed": true,
+   "error": null
+  },
+  "P8-langchain-invoke-01": {
+   "eval_id": "security.llmsep.v1",
+   "property": "P8",
+   "origin": "historical-miss",
+   "passed": true,
+   "error": null
+  },
+  "P8-message-dict-01": {
+   "eval_id": "security.llmsep.v1",
+   "property": "P8",
+   "origin": "derived",
+   "passed": true,
+   "error": null
+  },
+  "P8-missing-directive-01": {
+   "eval_id": "security.llmsep.v1",
+   "property": "P8",
+   "origin": "historical-miss",
+   "passed": true,
+   "error": null
+  },
+  "P8-missing-directive-02": {
+   "eval_id": "security.llmsep.v1",
+   "property": "P8",
+   "origin": "derived",
+   "passed": true,
+   "error": null
+  },
+  "P8-text-sink-01": {
+   "eval_id": "security.llmsep.v1",
+   "property": "P8",
+   "origin": "derived",
+   "passed": true,
+   "error": null
+  },
+  "P8-unscrubbed-output-01": {
+   "eval_id": "security.llmsep.v1",
+   "property": "P8",
+   "origin": "derived",
+   "passed": true,
+   "error": null
+  },
+  "P9-flask-dev-bind-01": {
+   "eval_id": "security.defaults.v1",
+   "property": "P9",
+   "origin": "derived",
+   "passed": true,
+   "error": null
+  },
+  "P9-flask-dev-bind-02": {
+   "eval_id": "security.defaults.v1",
+   "property": "P9",
+   "origin": "derived",
+   "passed": true,
+   "error": null
+  },
+  "P9-torch-load-01": {
+   "eval_id": "security.defaults.v1",
+   "property": "P9",
+   "origin": "derived",
+   "passed": true,
+   "error": null
+  },
+  "P9-weak-hash-01": {
+   "eval_id": "security.defaults.v1",
+   "property": "P9",
+   "origin": "derived",
+   "passed": true,
+   "error": null
+  },
+  "P9-weak-hash-02": {
+   "eval_id": "security.defaults.v1",
+   "property": "P9",
+   "origin": "derived",
+   "passed": true,
+   "error": null
+  },
+  "P9-weak-hash-03": {
+   "eval_id": "security.defaults.v1",
+   "property": "P9",
+   "origin": "derived",
+   "passed": true,
+   "error": null
+  }
+ },
+ "_reading": {
+  "evals": "per eval: n, recall, precision with Wilson 95% CIs, errors, historical misses \u2014 the gate fails a run whose point estimate falls below *_ci95[0]",
+  "tasks": "task_id -> passed; the gate fails any task that passed here and fails now"
+ }
+}

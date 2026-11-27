@@ -73,6 +73,8 @@ evals/cases/<P>/<id>/        case.yaml + vuln/ + clean/  (54 tasks, 24 historica
 evals/graders*.py            the oracles; evals/metrics.py the statistics
 evals/cards/<name>.md        the eval card per property
 evals/results/<run_id>/      samples.jsonl · summary.json · report.md  (gitignored; CI artifact)
+evals/baselines/<label>.json a published run's summary; latest.json names the current one
+evals/TRENDS.md              one row per published baseline (generated)
 ```
 
 ```bash
@@ -81,13 +83,27 @@ python -m evals run --strict                           # all 9 evals; exit 1 on 
 python -m evals run --eval egress --trials 3           # one eval, pass@k and pass^k over trials
 python -m evals card egress                            # the eval card
 python -m evals build-tasks                            # after adding or editing a case
+python -m evals gate --against latest                  # regression gate: exit 0 / 1 / 2
+python -m evals baseline publish --label v0.1.2        # at a release: commit the run as the baseline
 ```
 
 The numbers live in `evals/results/<run_id>/summary.json` (`overall` and per-eval
 blocks: `n`, `recall`, `precision`, each with `*_ci95`), pointed to by
 `evals/results/latest.json`; CI uploads the run directory as the `evals-run`
 artifact. Mutation-testing results (`evals/mutate.py`) are the
-`evals/results/mutation-*.md` tables.
+`evals/results/mutation-*.md` tables; project repos gate on them with the reusable
+workflow's opt-in `mutations: true` (CI-SETUP.md §9).
+
+**Gates and trends** (EVALS-PLAN.md Layer 4). CI's `evals` job runs the corpus and then
+`python -m evals gate --against latest`, which compares the run with the last published
+baseline in `evals/baselines/` and fails on a grader error, on recall or precision below
+the baseline's lower Wilson 95% bound (a drop inside the interval is noise and is
+reported as such), or on **any task that passed in the baseline and fails now** (a
+named regression is a failure whatever the aggregate says; with 54 tasks one flip is
+well inside the interval). Exit codes: 0 pass, 1 regression, 2 could not evaluate (no
+baseline, or an eval the baseline has that the run skipped). A release publishes its
+run with `python -m evals baseline publish --label vX.Y.Z`, which also regenerates
+[`evals/TRENDS.md`](evals/TRENDS.md), the table of every published baseline.
 
 ## Honest scope
 

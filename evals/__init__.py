@@ -14,7 +14,9 @@ Layout, in the conventions the labs' eval suites share (EVALS-PLAN.md Layer 6):
   cards.py, cards/       eval cards: task, construction, provenance, metrics, limitations,
                          contamination policy
   mutate.py              mutation testing of a project's regression net (Phase 3)
-  __main__.py            python -m evals run | list | card | build-tasks
+  gate.py, baselines/    published baselines (<label>.json, latest.json), the regression
+                         gate (Wilson bound + named regressions) and TRENDS.md (Phase 6)
+  __main__.py            python -m evals run | list | card | build-tasks | baseline | gate
 
 A task passes when the grader detects the violation in `vuln/` (recall) and does
 NOT detect it in `clean/` (precision); recall and precision carry Wilson 95% CIs,

@@ -16,8 +16,10 @@ Output, per run:
     <out>/<run_id>/report.md       the same as tables
     <out>/latest.json              {"run_id": ...} -> the run above
 
-`run_id` = `<UTC yyyymmddThhmmssZ>-<git sha7>`. Run directories are gitignored; Phase 6
-gates read the summary.json of the last tagged run.
+`run_id` = `<UTC yyyymmddThhmmssZ>-<git sha7>`. Run directories are gitignored; a
+release publishes one run's summary.json as `evals/baselines/<label>.json`
+(`python -m evals baseline publish`) and `python -m evals gate` compares every later run
+against it (evals/gate.py).
 """
 from __future__ import annotations
 
