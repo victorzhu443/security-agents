@@ -1,0 +1,64 @@
+# The four project repos whose security/mutations.yaml catalogues are the agent-eval task
+# set (EVALS-PLAN.md Phase 7). Every task is pinned to `commit`; the harness clones from
+# `local_path` (under $SA_REPOS_ROOT, default ~/Developer/projects) when that checkout
+# exists and from `url` otherwise (CI). The project repos are never modified or run in.
+#
+# `image.install` is the list of commands that turn python:3.12-slim into the per-repo
+# test image (container mode); the image is cached by the sha256 of the files named in
+# `image.hash_files` as they are at `commit`. `pytest` is added by env.py in every image.
+# `visibility: private` means CI needs a token to clone (TOOLKIT_TOKEN, if set).
+#
+# Test-command mapping (tasks.py): the catalogue's `test` names a host interpreter
+# (`.venv/bin/python`, `.venv-sec/bin/python`, an absolute venv path). In the container
+# the interpreter is `python` and the cwd is /work, so argv[0] is replaced and the rest
+# of the command is kept verbatim. In local mode the host command is resolved against the
+# local checkout's venv exactly as evals/mutate.py does (`resolve_command`).
+
+repos:
+  research-replication-agent:
+    url: https://github.com/victorzhu443/research-replication-agent.git
+    local_path: research-replication-agent
+    commit: 3b1c2556acbc7d94174ce05be0947a5e0ae3c996
+    catalogue: security/mutations.yaml
+    visibility: public
+    image:
+      hash_files: [pyproject.toml, uv.lock]
+      install:
+        - pip install --no-cache-dir uv
+        - uv export --frozen --no-dev --no-hashes --no-emit-project --no-emit-package security-agents -o /tmp/req.txt
+        - pip install --no-cache-dir -r /tmp/req.txt
+        - pip install --no-cache-dir "security-agents @ git+https://github.com/victorzhu443/security-agents@v0.1.1"
+
+  smart-dispatch:
+    url: https://github.com/victorzhu443/Smart-Dispatch-Assistant-for-Power-Markets.git
+    local_path: smart-dispatch
+    # The catalogue is on branch security/mutations (PR pending); main has none.
+    commit: 69abcc07c5184ffb45a8bfa303993e89cfc25c45
+    catalogue: security/mutations.yaml
+    visibility: public
+    image:
+      hash_files: [requirements_minimal.txt]
+      install:
+        - pip install --no-cache-dir -r requirements_minimal.txt hypothesis Django sqlalchemy
+
+  firstplay-backend:
+    url: https://github.com/victorzhu443/firstplay-backend.git
+    local_path: firstplay/firstplay-backend
+    commit: 165c3e8692566882f79172c3a159fcfedecc926f
+    catalogue: security/mutations.yaml
+    visibility: public
+    image:
+      hash_files: [requirements.txt, requirements-dev.txt]
+      install:
+        - pip install --no-cache-dir -r requirements.txt -r requirements-dev.txt
+
+  study-hub:
+    url: https://github.com/victorzhu443/study-hub.git
+    local_path: study-hub
+    commit: f0c25d17b00643fd138ac2ee96c1e8abba4bcec1
+    catalogue: security/mutations.yaml
+    visibility: private
+    image:
+      hash_files: [requirements.txt]
+      install:
+        - pip install --no-cache-dir hypothesis httpx PyMuPDF python-pptx python-docx "security-agents @ git+https://github.com/victorzhu443/security-agents@v0.1.1"
