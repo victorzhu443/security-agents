@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.4.0",
+  "id": "GHSA-f1x1-aaaa-0001",
+  "modified": "2025-03-20T00:00:00Z",
+  "published": "2025-03-14T12:00:00Z",
+  "aliases": ["CVE-2025-00001"],
+  "summary": "fetchkit follows an HTTP redirect to a destination it did not validate",
+  "details": "FIXTURE-ONLY-DETAILS-MARKER: this is a hand-written, benign test record about an imaginary package. The fetch helper in fetchkit used requests.get with the default redirect handling, so the host check that ran on the first URL did not run again on the redirect target. Fixed in 1.2.0.",
+  "severity": [{"type": "CVSS_V3", "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N"}],
+  "affected": [
+    {
+      "package": {"ecosystem": "PyPI", "name": "fetchkit"},
+      "ranges": [{"type": "ECOSYSTEM", "events": [{"introduced": "0"}, {"fixed": "1.2.0"}]}]
+    }
+  ],
+  "references": [
+    {"type": "WEB", "url": "https://git.example.invalid/acme/fetchkit/security/advisories/GHSA-f1x1-aaaa-0001"},
+    {"type": "FIX", "url": "https://git.example.invalid/acme/fetchkit/commit/0123456789abcdef0123456789abcdef01234567"},
+    {"type": "WEB", "url": "https://git.example.invalid/acme/fetchkit/pull/42"},
+    {"type": "ADVISORY", "url": "https://advisories.example.invalid/CVE-2025-00001"},
+    {"type": "PACKAGE", "url": "https://git.example.invalid/acme/fetchkit"}
+  ],
+  "database_specific": {
+    "cwe_ids": ["CWE-918"],
+    "severity": "MODERATE",
+    "github_reviewed": true,
+    "github_reviewed_at": "2025-03-14T12:00:00Z",
+    "nvd_published_at": "2025-03-14T10:00:00Z"
+  }
+}
