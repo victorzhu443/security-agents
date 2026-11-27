@@ -147,6 +147,23 @@ def _sha256(text: str) -> str:
 
 
 def prompt_hashes(task: Task, cond: Condition, *, workdir: str = "/app", repo_root: Path = REPO) -> Dict[str, str]:
-    """{"system": sha256, "user": sha256} of the exact texts sent under `cond`."""
+    """{"system": sha256, "user": sha256} of the exact texts sent under `cond` for THIS task.
+    The user text embeds the repo name and commit, so these differ per task; the registry
+    pins `template_hashes` instead (integration fix, CONTRACTS.md A8)."""
     return {"system": _sha256(system_body(task, cond, repo_root=repo_root)),
             "user": _sha256(user_text(task, cond, workdir=workdir))}
+
+
+#: The placeholder task the registry's `prompt_hashes` are computed from: every per-task value
+#: (repo, commit, description, id) is a fixed token, so the hash covers the TEMPLATE only.
+TEMPLATE_TASK = Task(task_id="<task_id>", eval_id="security.calib.egress.v1", repo="<repo>",
+                     repo_url="<repo_url>", commit="<commit>", property="P4", description="<description>",
+                     file="", find="", replace="", hidden_test="python -m pytest tests -q",
+                     suite_test="python -m pytest tests -q", container_test=["python", "-m", "pytest", "tests", "-q"],
+                     pythonpath=[], agent="agents/egress.md", canary="", source="advisory", kind=KIND_ADVISORY)
+
+
+def template_hashes(cond: Condition, *, workdir: str = "/app", repo_root: Path = REPO) -> Dict[str, str]:
+    """`prompt_hashes` of `TEMPLATE_TASK`: task-independent, so the registry can pin it and a run
+    can detect prompt drift by recomputing it."""
+    return prompt_hashes(TEMPLATE_TASK, cond, workdir=workdir, repo_root=repo_root)

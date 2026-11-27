@@ -700,3 +700,17 @@ A4 (`sast.py` → W-D; `SastAgent` → W-C; `sast_tools` option → W-B). W-A's 
   the output; it is not a unit test (harbor is not in the test venv).
 - **Prompt conditions (§6.15).** `openhands-sdk` (not `openhands`) is the heavyweight generic baseline
   name in `baselines.yaml`; Aider is dropped.
+
+### A8. Integration fixes by the governor (2026-11-27, after merging W-A … W-D)
+
+Three seam mismatches the contracts had not pinned; each fixed in the smallest place and
+recorded here rather than hidden in a merge:
+1. `ingest.read_candidates(path)` returns `(List[Candidate], meta)` (W-A's extra, not in the
+   contract); W-D's `calib-build` assumed dicts. Fixed in `runner._build_main`
+   (`loaded, _meta = read_candidates(...)`; `c.to_record()`), and W-D's `test_build_hooks_without_wb`
+   fixture became a complete Candidate record. The contract now states the return type.
+2. `prompts.prompt_hashes(task, cond)` is **per task** (the user text embeds repo and commit), so
+   it cannot be pinned in the registry. Added `prompts.TEMPLATE_TASK` + `template_hashes(cond)`
+   (placeholder tokens for every per-task value); `runner._prompt_hashes_for` and the registry test
+   use it; `evals/registry/calib/egress.yaml` `prompt_hashes` are filled from it.
+3. Nothing else was edited across an ownership line; the four merges were conflict-free.

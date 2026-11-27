@@ -178,16 +178,15 @@ def condition_requires(ablation: Optional[str]) -> Tuple[str, ...]:
 
 
 def _prompt_hashes_for(condition: str, tasks: Sequence[Task]) -> Dict[str, str]:
-    """{"system", "user"} of the prompts this run used, from prompts.prompt_hashes when the
-    module exists and a task is available; {} otherwise (recorded as unpinned)."""
+    """{"system", "user"} of the prompt TEMPLATE this run used (prompts.template_hashes: the
+    per-task repo/commit tokens are fixed so the registry can pin it); {} when prompts.py is
+    absent (recorded as unpinned). `tasks` is kept for the signature; the hash does not depend on it."""
     try:
-        from ..agent.prompts import Condition, prompt_hashes
+        from ..agent.prompts import Condition, template_hashes
     except ImportError:
         return {}
-    if not tasks:
-        return {}
     try:
-        return dict(prompt_hashes(tasks[0], Condition.parse(condition)))
+        return dict(template_hashes(Condition.parse(condition)))
     except Exception:  # noqa: BLE001 - a prompts failure must not lose the run's numbers
         return {}
 
@@ -974,7 +973,10 @@ def _ingest_main(argv: List[str]) -> int:
     except ImportError:
         print("calib-ingest: evals.calib.ingest is not on this checkout (W-A's branch); nothing to run", file=sys.stderr)
         return 2
-    return int(ingest_main(argv) or 0)
+    try:
+        return int(ingest_main(argv) or 0)
+    except SystemExit as e:          # argparse in the delegated CLI: surface its code, do not raise
+        return int(e.code) if isinstance(e.code, int) else 2
 
 
 #: Base-image minors whose `python:<minor>-slim` tag `--resolve-digests` pins (A5/A7: pin digests, not tags).
@@ -1057,7 +1059,8 @@ def _build_main(argv: List[str]) -> int:
         return 2
     try:
         from .ingest import read_candidates   # W-A: skips the first-line {"_meta": ...} provenance record
-        cands = [dict(c) for c in read_candidates(cpath)]
+        loaded, _meta = read_candidates(cpath)          # -> (List[Candidate], meta)
+        cands = [c.to_record() for c in loaded]
     except ImportError:
         cands = [c for c in (json.loads(l) for l in cpath.read_text().splitlines() if l.strip()) if "_meta" not in c]
     if not args.all:

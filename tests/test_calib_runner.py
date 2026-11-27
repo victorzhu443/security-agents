@@ -210,7 +210,8 @@ def test_build_calib_summary_blocks_cis_fpr_bins_passk(tmp_path: Path):
     assert by["P4-ghsa-cccc"]["trials"] == 1 and by["P4-ghsa-cccc"]["unscored"] == 1
     assert by["P4-neg-z-clean"]["passes"] == 1 and by["P4-neg-z-clean"]["is_negative"] is True
     assert "power" in s["power_note"] and s["budget"]["note"] == R.BUDGET_NOTE
-    assert s["prompt_hashes"]["pinned"] is False and s["prompt_drift"] is False
+    # the registry pins the template hashes since integration (A8); a run with no hashes is not drift
+    assert s["prompt_hashes"]["pinned"] is True and s["prompt_drift"] is False
     report = R.render_calib_report({**s, "run_id": "r"}, recs)
     assert "| metric | train | validation | test |" in report and "| metric | pre | post | unknown |" in report
     assert "FPR (negatives)" in report and "P4-ghsa-cccc" in report
@@ -444,15 +445,17 @@ def test_registry_entry_has_every_readme_field():
 def test_registry_prompt_hashes_agree_with_prompts_when_present():
     prompts = pytest.importorskip("evals.agent.prompts")     # W-C's module; skipped on this branch
     e = R.load_calib_registry()
-    task = TASKS["P4-ghsa-aaaa"]
     for mode in ("class-blind", "class-aware"):
-        want = prompts.prompt_hashes(task, prompts.Condition.parse(mode))
+        want = prompts.template_hashes(prompts.Condition.parse(mode))     # task-independent (A8)
         assert e["prompt_hashes"][mode] == want, f"registry prompt_hashes.{mode} must be {want} (fill at integration)"
 
 
 def test_build_hooks_without_wb(tmp_path: Path, capsys):
     cands = tmp_path / "c.jsonl"
-    cands.write_text(json.dumps({"ghsa_id": "GHSA-x", "status": "selected"}) + "\n")
+    # a complete W-A Candidate record (ingest.read_candidates constructs Candidate(**rec))
+    cands.write_text(json.dumps({"ghsa_id": "GHSA-x", "cve_id": "", "cwe": ["CWE-918"], "package": "demo",
+                                 "ecosystem": "PyPI", "project": "example/demo", "repo_url": "https://example.invalid/demo",
+                                 "disclosure_date": "2025-01-01", "fix_refs": [], "fix_commit": "", "status": "selected"}) + "\n")
     rc = cli(["calib-build", "--dry-run", "--candidates", str(cands)])
     err = capsys.readouterr().err
     assert rc in (0, 2)

@@ -35,8 +35,8 @@ primary_metric:
 secondary_metrics: [class_aware_recall, fix, claim_fidelity, scope_safety, cost_usd_per_task, pass_pow_k]
 graders: [recall, fix, claim_fidelity, scope_safety]
 prompt_hashes:
-  class-blind: {system: "", user: ""}
-  class-aware: {system: "", user: ""}
+  class-blind: {system: "7fb53e35158c50e700a916704dd4f87fa9b2052529d4e31eef2f32066ef12275", user: "93b2cd9538013423df6254bf789975dee5cc8f04bc57f8d0481202736cc07b80"}
+  class-aware: {system: "bafffbc0e6f57a192919f1c645d75c9edee386250a370e79f11bff339100c6c5", user: "3cc7e1147ab95eb7d32fd67fea1448c4c613a8c517b923d3407cf11253665aac"}
 conditions: [class-blind, class-aware, class-blind+no_verifier]
 cutoffs: evals/calib/cutoffs.yaml
 anchor: []
