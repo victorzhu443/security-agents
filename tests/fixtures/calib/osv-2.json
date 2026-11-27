@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.4.0",
+  "id": "GHSA-f1x2-bbbb-0002",
+  "modified": "2024-11-06T00:00:00Z",
+  "published": "2024-11-05T09:30:00Z",
+  "aliases": ["CVE-2024-00002"],
+  "summary": "linkpreview re-resolves the hostname after validating it (DNS rebinding)",
+  "details": "FIXTURE-ONLY-DETAILS-MARKER-TWO: a hand-written, benign test record about an imaginary package. The preview service validated the resolved address of a user-supplied URL and then let httpx resolve the name a second time when connecting. The maintainers' advisory names no commit or pull request.",
+  "severity": [{"type": "CVSS_V3", "score": "CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:L/I:N/A:N"}],
+  "affected": [
+    {
+      "package": {"ecosystem": "PyPI", "name": "linkpreview"},
+      "ranges": [{"type": "ECOSYSTEM", "events": [{"introduced": "0"}, {"fixed": "0.9.1"}]}]
+    }
+  ],
+  "references": [
+    {"type": "ADVISORY", "url": "https://advisories.example.invalid/CVE-2024-00002"},
+    {"type": "WEB", "url": "https://git.example.invalid/example-org/linkpreview/issues/17"},
+    {"type": "PACKAGE", "url": "https://git.example.invalid/example-org/linkpreview"}
+  ],
+  "database_specific": {
+    "cwe_ids": ["CWE-918", "CWE-367"],
+    "severity": "LOW",
+    "github_reviewed": true,
+    "github_reviewed_at": "2024-11-05T09:30:00Z",
+    "nvd_published_at": "2024-11-05T08:00:00Z"
+  }
+}
