@@ -184,7 +184,24 @@ class BudgetGuard:
 
 # --------------------------------------------------------------------- tools
 
+def _strictify(schema: Any) -> Any:
+    """Strict tool schemas need `additionalProperties: false` on EVERY object level, not only
+    the top one; the API rejected the first pilot's write_report tool for a nested object
+    without it (tools.5.custom ...). Applied recursively so no tool can regress."""
+    if isinstance(schema, dict):
+        out = {k: _strictify(v) for k, v in schema.items()}
+        if out.get("type") == "object":
+            out.setdefault("properties", {})
+            out.setdefault("required", list(out["properties"]))
+            out["additionalProperties"] = False
+        return out
+    if isinstance(schema, list):
+        return [_strictify(x) for x in schema]
+    return schema
+
+
 def _tool(name: str, description: str, properties: Dict[str, Any], required: Sequence[str]) -> dict:
+    properties = _strictify(properties)
     return {
         "name": name,
         "description": description,
@@ -248,7 +265,20 @@ def tool_definitions() -> List[dict]:
             "property ^P[0-9]$, repo, commit, findings[{id,file,line,evidence,status[,severity,pr]}], "
             "claims[{statement,oracle,evidence}]). Oracles are commands runnable from the repo root. "
             "Call it once, when you are done; it ends the session.",
-            {"report": {"type": "object", "description": "The security report object."}},
+            {"report": {"type": "object", "description": "The security report object (agents/report.schema.json).",
+                        "properties": {
+                            "agent": {"type": "string"}, "property": {"type": "string"},
+                            "repo": {"type": "string"}, "commit": {"type": "string"},
+                            "findings": {"type": "array", "items": {"type": "object", "properties": {
+                                "id": {"type": "string"}, "file": {"type": "string"}, "line": {"type": "integer"},
+                                "evidence": {"type": "string"}, "status": {"type": "string"},
+                                "severity": {"type": "string"}, "pr": {"type": "string"}},
+                                "required": ["id", "file", "line", "evidence", "status", "severity", "pr"]}},
+                            "claims": {"type": "array", "items": {"type": "object", "properties": {
+                                "statement": {"type": "string"}, "oracle": {"type": "string"},
+                                "evidence": {"type": "string"}},
+                                "required": ["statement", "oracle", "evidence"]}}},
+                        "required": ["agent", "property", "repo", "commit", "findings", "claims"]}},
             ["report"],
         ),
     }
@@ -622,7 +652,7 @@ def run_trial(task: Task, env: Env, *, model: str, budget_usd: float, agent_body
                 return finish(STOP_ERROR, f"unparseable tool JSON on {json_retries} consecutive turns")
             continue
         except _api_error_type() as e:
-            return finish(STOP_ERROR, f"api: {type(e).__name__}")
+            return finish(STOP_ERROR, f"api: {type(e).__name__}: {redact_secrets(str(e))[:300]}")
         json_retries = 0
 
         usage = _usage_of(response)
@@ -680,3 +710,22 @@ def run_trial(task: Task, env: Env, *, model: str, budget_usd: float, agent_body
             return finish(STOP_DONE)
         if budget_reason:
             return finish(STOP_BUDGET, budget_reason)
+
+
+_SECRET_SHAPES = re.compile(r"(sk-ant-[A-Za-z0-9_\-]{4,}|sk-[A-Za-z0-9_\-]{16,}|ghp_[A-Za-z0-9]{10,}|AKIA[0-9A-Z]{12,})")
+
+
+def redact_secrets(text: str) -> str:
+    """Error bodies are recorded in samples.jsonl and CI logs; anything key-shaped is masked
+    first (the first version recorded the class name only for exactly this reason — the
+    message is needed to diagnose a 400, the key never is)."""
+    return _SECRET_SHAPES.sub("[redacted-secret]", text)
+
+
+#: API error classes that mean the REQUEST or CREDENTIAL is wrong, not the task: one of these
+#: on a trial means every later trial would fail the same way, so the run must stop.
+CONFIG_ERROR_CLASSES = ("AuthenticationError", "PermissionDeniedError", "BadRequestError", "NotFoundError")
+
+
+def is_config_error(failure_reason: str) -> bool:
+    return any(failure_reason.startswith(f"api: {c}") for c in CONFIG_ERROR_CLASSES)

@@ -294,6 +294,10 @@ def _baseline_rows(task: Task, vres: ValidityResult, prov: Provenance, model: st
     return out
 
 
+class ConfigError(RuntimeError):
+    """The run cannot proceed: the API rejected the request or credential (see failure_reason)."""
+
+
 def run_agent(repo_selector: Union[str, Sequence[Task]], *, model: str, trials: int = 1, budget_usd: float,
               out_dir: Path = RESULTS, mode: str = "auto", only=None, log=print,
               env_factory: Optional[Callable] = None) -> Dict:
@@ -404,6 +408,12 @@ def run_agent(repo_selector: Union[str, Sequence[Task]], *, model: str, trials: 
                             "failure_reason": lr.failure_reason, "transcript": lr.transcript},
                            indent=1, default=str))
             emit(_trial_result(task, trial, variant="agent", scores=scores, lr=lr, prov=prov))
+            # A request/credential error is a harness configuration fault, not a task result:
+            # every later trial would fail identically, so stop the run (the first pilot
+            # reported 18 identical BadRequestErrors and exited 0).
+            is_cfg = getattr(lmod, "is_config_error", None)
+            if lr is not None and is_cfg is not None and is_cfg(lr.failure_reason or ""):
+                raise ConfigError(f"{task.task_id}: {lr.failure_reason}")
             if log:
                 log(f"{task.task_id} trial {trial}: {'pass' if scores.passed else 'FAIL'} "
                     f"stop={lr.stop_reason} cost=${lr.cost_usd:.4f} spent=${spent:.4f}")
@@ -605,6 +615,9 @@ def main_run(argv=None) -> int:
                   out_dir=Path(args.out), mode=args.mode, only=args.only)
     except loop.AuthPreflightError as e:
         print(f"refusing to start: {e}", file=sys.stderr)
+        return 2
+    except ConfigError as e:
+        print(f"aborted: configuration-class API error on a trial: {e}", file=sys.stderr)
         return 2
     return 0
 

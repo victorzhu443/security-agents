@@ -574,14 +574,14 @@ def test_unparseable_tool_json_reissues_turn_then_errors(tmp_path):
     assert len(client2.requests) == 3 and len(res2.denials) == 3
 
 
-def test_api_error_reports_class_name_only(tmp_path):
+def test_api_error_reports_class_and_redacted_message(tmp_path):
     anthropic = pytest.importorskip("anthropic")
     import httpx
     req = httpx.Request("POST", "https://api.invalid/v1/messages")
     err = anthropic.AuthenticationError("invalid x-api-key sk-ant-SECRET", response=httpx.Response(401, request=req),
                                         body=None)
     res = run(FakeClient(err), FakeEnv(tmp_path))
-    assert res.stop_reason == STOP_ERROR and res.failure_reason == "api: AuthenticationError"
+    assert res.failure_reason.startswith('api: AuthenticationError: invalid x-api-key') and '[redacted-secret]' in res.failure_reason
     assert "sk-ant" not in res.failure_reason
 
 
@@ -665,3 +665,26 @@ def test_loop_module_imports_without_anthropic(monkeypatch):
     assert mod._api_error_type() == ()
     monkeypatch.undo()
     importlib.reload(loop)
+
+
+def test_every_tool_schema_is_strict_at_every_object_level():
+    """The API rejected write_report's nested object without additionalProperties:false."""
+    from evals.agent import loop as L
+    def strict(sch):
+        if isinstance(sch, dict):
+            if sch.get("type") == "object" and sch.get("additionalProperties") is not False:
+                return False
+            return all(strict(v) for v in sch.values())
+        if isinstance(sch, list):
+            return all(strict(x) for x in sch)
+        return True
+    for t in L.tool_definitions():
+        assert strict(t["input_schema"]), t["name"]
+
+
+def test_is_config_error_classifies_request_and_credential_faults():
+    from evals.agent import loop as L
+    assert L.is_config_error("api: BadRequestError: tools.5.custom ...")
+    assert L.is_config_error("api: AuthenticationError: invalid x-api-key")
+    assert not L.is_config_error("api: RateLimitError: slow down")
+    assert not L.is_config_error("budget: 40 tool calls (max 40)")
