@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.4.0",
+  "id": "GHSA-f1x3-cccc-0003",
+  "modified": "2023-07-02T00:00:00Z",
+  "published": "2023-07-01T15:00:00Z",
+  "aliases": ["CVE-2023-00003"],
+  "summary": "url-grabber fetches a user-supplied URL without a host check",
+  "details": "FIXTURE-ONLY-DETAILS-MARKER-THREE: a hand-written, benign test record about an imaginary npm package. It exists so the ecosystem filter has something to drop; the record is otherwise well-formed and names one fix commit.",
+  "severity": [{"type": "CVSS_V3", "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N"}],
+  "affected": [
+    {
+      "package": {"ecosystem": "npm", "name": "url-grabber"},
+      "ranges": [{"type": "SEMVER", "events": [{"introduced": "0"}, {"fixed": "2.0.1"}]}]
+    }
+  ],
+  "references": [
+    {"type": "WEB", "url": "https://git.example.invalid/example-org/url-grabber/commit/fedcba9876543210fedcba9876543210fedcba98"},
+    {"type": "PACKAGE", "url": "https://git.example.invalid/example-org/url-grabber"}
+  ],
+  "database_specific": {
+    "cwe_ids": ["CWE-918"],
+    "severity": "HIGH",
+    "github_reviewed": true,
+    "github_reviewed_at": "2023-07-01T15:00:00Z",
+    "nvd_published_at": "2023-07-01T14:00:00Z"
+  }
+}

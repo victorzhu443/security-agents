@@ -1,0 +1,23 @@
+# Calibration-task repositories (evals/calib/CONTRACTS.md, W-B). One entry per BUILT Harbor task,
+# keyed by task_id, appended by `evals/calib/build.py::build_task` (positives) and
+# `negatives.py::build_negative`; read by `build.load_calib_repos` -> evals.agent.repos.RepoConfig.
+# This is the second repo table (the four-repo evals/agent/repos.yaml is untouched); nothing here
+# is ever run in or written to — the harness only clones from `url` at `commit`.
+#
+# Schema per entry:
+#   url:         https clone URL of the third-party project
+#   local_path:  .cache/calib/<task_id>   (relative to $SA_REPOS_ROOT; a cache, never a checkout of ours)
+#   commit:      the clone's commit — vuln_commit on a positive, the pinned commit on a negative
+#   visibility:  public
+#   image:
+#     base:      python:<minor>-slim  (RepoConfig.base_image; from build.python_requires)
+#     install:   the Dockerfile RUN lines (build.image_recipe; date-pinned `uv pip install --exclude-newer=`)
+#
+# base_digests: {tag: "sha256:<64 hex>"} — the image digest of each `python:<minor>-slim` tag, resolved
+#   ONCE with network by `calib-build --resolve-digests` (W-D's flag; W-B's build reads the map). When a
+#   tag has an entry the Dockerfile says `FROM <tag>@<digest>` and task metadata records
+#   `base_image_digest`; otherwise the tag alone and "" (CONTRACTS.md A7).
+#
+# Empty until step 3 (build after co-selection). Regenerated, not hand-edited.
+base_digests: {}
+repos: {}

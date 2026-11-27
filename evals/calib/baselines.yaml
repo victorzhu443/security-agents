@@ -1,0 +1,162 @@
+# Baseline agents for the calibration runs (evals/calib/CONTRACTS.md amendment A4, 2026-11-27).
+#
+# This file is DATA: nothing in evals/ hard-codes the baseline list. `python -m evals calib-run
+# --baseline <name>` looks an entry up here (a disabled entry is refused unless --allow-disabled),
+# and the card's Baselines section renders this file. Every baseline is graded by the same
+# verifier (a finding = a reported file and line), so the numbers are comparable; the condition
+# asymmetry (network, key inside the box) is recorded per run in summary.provenance.
+#
+# Entry fields:
+#   name          the --baseline value
+#   kind          ours | generic | control | sast
+#   harbor_agent  the `harbor run -a` value (built-in name or module.path:ClassName)
+#   model         default model id, or null (controls and SAST tools call no model)
+#   enabled       false until the entry is installed, pinned and smoke-tested
+#   version       the pin passed as `--ak version=<pin>` (Harbor pins no agent versions itself)
+#   network       no-network | allowlist   (installed agents need the model API from inside the box)
+#   agent_kwargs  extra `--ak key=value` pairs
+#   note          why it is here / what blocks enabling it
+#   sast only:    invocation (the command run in /app), adapter (dotted module:function in
+#                 evals.calib.sast), needs_image_tools (W-B's `calib-build --with-sast`), license_note
+#
+# Names are Harbor's agent names (`openhands-sdk`, not `openhands`; Aider is not listed — SURVEY.md §6.15).
+# Limitation (A4): no stable, permissively licensed, cross-file Python taint engine with a stock
+# SSRF rule exists; the SAST rows are single-file pattern matchers or spikes, and say so.
+# Smoke once docker is up (never run from the test suite): harbor run -d terminal-bench-sample@2.0 -a <baseline>
+as_of: "2026-11-27"
+baselines:
+  - name: ours
+    kind: ours
+    harbor_agent: evals.agent.harbor_agent:SecurityAgent
+    model: null
+    enabled: true
+    version: "0.1.1"
+    network: no-network
+    agent_kwargs: {condition: class-blind}
+    note: our external agent; the model loop runs on the host, the box has no egress
+
+  - name: nop
+    kind: control
+    harbor_agent: nop
+    model: null
+    enabled: true
+    version: "harbor-0.27.0"
+    network: no-network
+    agent_kwargs: {}
+    note: validity-gate no-op leg (hidden test must fail, suite must pass); the FP floor
+
+  - name: oracle
+    kind: control
+    harbor_agent: oracle
+    model: null
+    enabled: true
+    version: "harbor-0.27.0"
+    network: no-network
+    agent_kwargs: {}
+    note: validity-gate reference leg (runs solution/solve.sh, the maintainers' fix)
+
+  - name: mini-swe-agent
+    kind: generic
+    harbor_agent: mini-swe-agent
+    model: null
+    enabled: false
+    version: ""
+    network: allowlist
+    agent_kwargs: {}
+    note: primary same-model generic baseline (MIT); pending pin + smoke, open-source survey 2026-11-27
+
+  - name: terminus-2
+    kind: generic
+    harbor_agent: terminus-2
+    model: null
+    enabled: false
+    version: "harbor-0.27.0"
+    network: allowlist
+    agent_kwargs: {}
+    note: ships in Harbor; its loop runs outside the box (BaseAgent) — the structural template for our agent
+
+  - name: openhands-sdk
+    kind: generic
+    harbor_agent: openhands-sdk
+    model: null
+    enabled: false
+    version: ""
+    network: allowlist
+    agent_kwargs: {}
+    note: heavy; bake with --install-only first; pending open-source survey 2026-11-27
+
+  - name: claude-code
+    kind: generic
+    harbor_agent: claude-code
+    model: null
+    enabled: false
+    version: ""
+    network: allowlist
+    agent_kwargs: {}
+    note: pending open-source survey 2026-11-27
+
+  - name: codex
+    kind: generic
+    harbor_agent: codex
+    model: null
+    enabled: false
+    version: ""
+    network: allowlist
+    agent_kwargs: {}
+    note: pending open-source survey 2026-11-27
+
+  - name: semgrep
+    kind: sast
+    harbor_agent: evals.agent.harbor_agent:SastAgent
+    model: null
+    enabled: false
+    version: ""
+    network: no-network
+    agent_kwargs: {tool: semgrep}
+    invocation: "/opt/sast/bin/semgrep scan --config /opt/sast/rules/p-python.yml --json -o /tmp/semgrep.json /app"
+    adapter: evals.calib.sast:semgrep_to_report
+    needs_image_tools: [semgrep]
+    license_note: "p/python ruleset pre-fetched into /opt/sast/rules at image build (offline at run time); never vendored (semgrep-rules license is internal-use)"
+    note: single-file pattern matcher; pending image with /opt/sast
+
+  - name: codeql
+    kind: sast
+    harbor_agent: evals.agent.harbor_agent:SastAgent
+    model: null
+    enabled: false
+    version: ""
+    network: no-network
+    agent_kwargs: {tool: codeql}
+    invocation: "</opt/codeql/codeql database create + analyze py/full-ssrf py/partial-ssrf --format=sarif-latest>"
+    adapter: evals.calib.sast:sarif_to_report
+    needs_image_tools: [codeql]
+    license_note: "CLI downloaded at image build, never redistributed; use on OSI-licensed code/research"
+    note: the one cross-file taint engine; licence restricts it to OSI-licensed code and research
+
+  - name: bandit
+    kind: sast
+    harbor_agent: evals.agent.harbor_agent:SastAgent
+    model: null
+    enabled: false
+    version: ""
+    network: no-network
+    agent_kwargs: {tool: bandit}
+    invocation: "/opt/sast/bin/bandit -r /app -f json -o /tmp/bandit.json -t B310,B113,B501"
+    adapter: evals.calib.sast:bandit_to_report
+    needs_image_tools: [bandit]
+    license_note: "Apache-2.0; installed from PyPI at image build"
+    note: single-file checks (urlopen, requests without timeout, verify=False); no taint tracking
+
+  - name: pysa
+    kind: sast
+    harbor_agent: evals.agent.harbor_agent:SastAgent
+    model: null
+    enabled: false
+    version: ""
+    network: no-network
+    agent_kwargs: {tool: pysa}
+    invocation: "<pyre analyze --save-results-to /tmp/pysa>"
+    adapter: evals.calib.sast:pysa_to_report
+    needs_image_tools: [pyre-check]
+    license_note: "MIT; only Pysa models we write ourselves are shipped"
+    note: one-day spike; drops to reference if it fails on > 25 % of repos

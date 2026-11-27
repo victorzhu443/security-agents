@@ -140,7 +140,7 @@ def requirements_hash(workdir: Path, cfg: RepoConfig) -> str:
     commit), plus the base image and install recipe, so a changed recipe also misses the
     cache. A missing file hashes as `<missing>` rather than raising (uv.lock is optional)."""
     h = hashlib.sha256()
-    h.update(BASE_IMAGE.encode())
+    h.update((cfg.base_image or BASE_IMAGE).encode())
     for step in cfg.image_install:
         h.update(b"\0install:" + step.encode())
     for rel in cfg.image_hash_files:
@@ -156,10 +156,10 @@ def image_tag(cfg: RepoConfig, requirements_hash: str) -> str:
 
 
 def dockerfile(cfg: RepoConfig) -> str:
-    """python:3.12-slim + git (the recipes pip-install from git+https) + the repo's install
+    """`cfg.base_image` (default python:3.12-slim) + git (the recipes pip-install from git+https) + the repo's install
     steps run inside a COPY of the clone at /src + pytest. Tests run from the /work mount,
     never from /src."""
-    lines = [f"FROM {BASE_IMAGE}",
+    lines = [f"FROM {cfg.base_image or BASE_IMAGE}",
              "ENV PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_ROOT_USER_ACTION=ignore PYTHONDONTWRITEBYTECODE=1",
              "RUN apt-get update && apt-get install -y --no-install-recommends git "
              "&& rm -rf /var/lib/apt/lists/*",
