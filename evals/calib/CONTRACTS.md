@@ -493,3 +493,167 @@ Harbor's `JobResult` (write the fixture by hand from the field list in this file
 - Co-selection (step 2) needs Victor; `evals/calib/candidates/egress.yaml` is written then.
 - `calib-validate` in container mode and the seal (step 6–7) wait for colima or CI.
 - `evals/agent/prices.yaml` needs a `claude-fable-5-1` row before any Fable run (loop refuses unknown models).
+
+---
+
+## Amendments — 2026-11-27, from the open-source survey (supersede the text above where they differ)
+
+Six read-only survey agents reported while the workers were starting (`$SP/survey-*.md`). The
+decisions below are Victor's/the coordinator's; the governor verified the package facts against
+PyPI and the docs on 2026-11-27. Workers were messaged the deltas that touch their files.
+
+### A1. The verifier is a Harbor RewardKit tree (W-B layout, W-C criteria)
+
+`harbor-rewardkit==0.2.4` (PyPI 2026-11-01, Apache-2.0, Python ≥ 3.12; pinned in the `calib`
+extra). Verified against docs.harborframework.com/rewardkit/quick-start and the
+create-a-verifier tutorial: every subdirectory of `tests/` is one **reward dimension**; each `.py`
+in it is one score made of criteria; `from rewardkit import criterion` decorates
+`fn(workspace: Path, ...) -> bool | float | {"score", "reasoning", ...}`; built-ins via
+`import rewardkit as rk` / `from rewardkit import criteria` (`rk.command_succeeds("…")`,
+`rk.file_exists`, …); a root `tests/reward.toml` with `[[reward]] name = "reward"
+aggregation = "all-pass"` produces the `reward` key Harbor reads; output is
+`/logs/verifier/reward.json` (`{dimension: score, …, "reward": …}`) plus
+`/logs/verifier/reward-details.json` (per-criterion score/weight/reasoning/error). RewardKit's
+LLM **judge criteria stay off**: the verifier is deterministic and makes no model call
+(`[verifier.env]` carries no key).
+
+The docs' `test.sh` uses `uvx --from 'harbor-rewardkit==0.2.*'`, which downloads at verifier time
+and **fails under `no-network`**. So the image bakes RewardKit into its own venv
+(`uv venv /opt/rewardkit && uv pip install --python /opt/rewardkit/bin/python
+harbor-rewardkit==0.2.4`) so its dependencies (litellm, pydantic) never touch the project's
+date-pinned environment, and `test.sh` runs `/opt/rewardkit/bin/rewardkit /tests`.
+`rk.command_succeeds("python -m pytest …")` resolves `python` to the project interpreter.
+
+New ownership: **W-C owns `evals/calib/verifier_assets/`** — the complete `tests/` tree template:
+```
+verifier_assets/
+├── test.sh            pre-step then `/opt/rewardkit/bin/rewardkit /tests`
+├── criteria.py        shared @criterion(shared=True) functions; imports verify.py (same dir) for the pure logic
+├── verify.py          (copied here from evals/calib/verify.py by W-C's build step or a symlink in the repo? NO symlinks: W-B copies evals/calib/verify.py into tests/ at build time)
+├── reward.toml        [[reward]] name="reward" aggregation="all-pass"
+├── recall/recall.py           criteria.finding_in_fix_hunk()
+├── fix/fix.py                 criteria.hidden_test_passes(); criteria.suite_passes()     (+ fix/reward.toml all-pass)
+├── claim_fidelity/claims.py   criteria.claims_verified()
+├── scope_safety/scope.py      criteria.diff_in_scope()
+└── fp/fp.py                   criteria.no_class_finding()
+```
+Dimension and criterion names are `evals.calib.REWARD_DIMENSIONS` / `REWARD_CRITERIA` (constants).
+**W-B's `build_task` copies `verifier_assets/*` and `evals/calib/verify.py` into `tests/`**, then adds
+`tests/task.json` and `tests/hidden.patch` (positives). On W-B's branch the assets do not exist:
+`build_task` writes `tests/test.sh` as a stub (exit 2) and records `verifier_vendored: false`.
+
+`test.sh` pre-step (before rewardkit, in `/app`): `git add -N . && git diff --no-color >
+/logs/verifier/agent.diff && git reset -q` (the agent's diff, BEFORE the hidden tests land), then
+`git apply --index /tests/hidden.patch || touch /logs/verifier/hidden_patch_conflict` when the
+patch exists. Criteria read `/tests/task.json`, `/logs/verifier/agent.diff`, the conflict marker
+and `/logs/artifacts/report.json`; none of them re-derives the diff after the patch. `verify.py`
+stays stdlib-only pure functions (`grade_recall`, `grade_fp`, `grade_scope`, `grade_claims`,
+`parse_rc`, …) so the unit tests and the criteria share one implementation; the earlier
+`verify()`/`main()` that wrote reward.json directly are **dropped** (RewardKit writes it).
+`fix` criteria return `{"score", "reasoning": "rc=<n>"}` so the validity gate can read the rc from
+`reward-details.json`: **nop run** `hidden_test_passes` score 0 with `rc=1` and `suite_passes` 1;
+**oracle run** both 1; **negatives** `fix/` holds `suite_passes` only. `recall` on a negative and
+`fp` on a positive return `1.0` with reasoning `not-applicable`; W-D aggregates recall over
+positives and fp over negatives only, by task metadata.
+
+### A2. Human review rubric (W-A review sheet, W-B metadata, G types)
+
+SWE-bench Verified's two axes, scored by Victor at co-selection: `review_underspecified` (0–3)
+and `review_test_unfair` (0–3); **drop at ≥ 2 on either**. Added as defaulted `Task` fields
+(`-1` = unscored), written into `task.toml [metadata]` by W-B, and two columns in
+`CANDIDATES-REVIEW.md` (blank cells to fill) by W-A.
+
+### A3. Ingest source (W-A) — decided by the data survey, counts measured today
+
+Primary source: the **OSV.dev PyPI dump** (`https://osv-vulnerabilities.storage.googleapis.com/PyPI/all.zip`,
+~38 MB, CC-BY-4.0; 27,101 records; **CWE-918: 266, with a fix link 179** — clears the ≥ 60 gate).
+GHSA is consumed through the OSV mirror (GHSA records carry `database_specific.cwe_ids`). A cached
+copy from the survey is at `$SP/dl-osv/` — **reuse it, do not re-download**. NVD API 2.0 only as a
+fallback for a missing CWE/date (rate-limited; not in Phase 1). CVEfixes = cross-check only;
+PatchEval has one CWE-918 record, not a source (note it as the seed for the next class). Fix links:
+`references[type == "FIX"]` plus any `/commit/<sha>` or `/pull/<n>` URL; only ~16 % of fixed records
+carry `GIT` ranges, so PR URLs are resolved to merge commits **host-side via the GitHub API (`gh
+api repos/<o>/<r>/pulls/<n>` → `merge_commit_sha`), cached in `$SP/gh-cache/`**, recorded as
+`fix_commit_source: "github-api-pr-merge" | "commit-url" | ""`. `Source` implementations:
+`OSVZipSource(zip_path)`, `OSVDirectorySource` (kept), `OSVFixtureSource`.
+**Monoculture risk:** 123 of the 179 fixable CWE-918 records were published in 2026 and cluster in
+AI-framework packages. `CANDIDATES-REVIEW.md` must show per-project counts and the per-year
+distribution; co-selection caps any project at **≤ 15 % of positives**; W-D's `assign` warns when a
+project exceeds the cap and stratifies by library × sub_scenario with project grouping as before.
+
+### A4. Baselines (W-D config, W-C agent wrappers, W-B image option)
+
+`evals/calib/baselines.yaml` is data, never code. Entry schema:
+```yaml
+- name: ours            kind: ours      harbor_agent: evals.agent.harbor_agent:SecurityAgent   enabled: true
+  network: no-network   version: "<toolkit version>"   agent_kwargs: {condition: class-blind}
+- name: mini-swe-agent  kind: generic   harbor_agent: mini-swe-agent  enabled: false  version: "<pin>"  network: allowlist  note: primary same-model generic baseline (MIT)
+- name: terminus-2      kind: generic   harbor_agent: terminus-2      enabled: false  note: ships in Harbor; its loop runs outside the box (BaseAgent) — the TEMPLATE for our agent
+- name: openhands       kind: generic   enabled: false  note: heavy; bake with --install-only
+- name: claude-code     kind: generic   enabled: false
+- name: codex           kind: generic   enabled: false
+- name: nop             kind: control   harbor_agent: nop     enabled: true   note: validity gate no-op leg; FP floor
+- name: oracle          kind: control   harbor_agent: oracle  enabled: true   note: validity gate reference leg (solution/solve.sh)
+- name: semgrep         kind: sast      harbor_agent: evals.agent.harbor_agent:SastAgent  enabled: false
+  invocation: "semgrep scan --config p/python --json -o /tmp/semgrep.json /app"   adapter: evals.calib.sast:semgrep_to_report
+  needs_image_tools: [semgrep]   license_note: "rules fetched at image build; never vendored (semgrep-rules license is internal-use)"
+- name: codeql          kind: sast      invocation: "<codeql database create + analyze py/full-ssrf py/partial-ssrf --format=sarif-latest>"  adapter: evals.calib.sast:sarif_to_report
+  needs_image_tools: [codeql]    license_note: "CLI downloaded at image build, never redistributed; use on OSI-licensed code/research"
+- name: bandit          kind: sast      invocation: "bandit -r /app -f json -o /tmp/bandit.json -t B310,B113,B501"  adapter: evals.calib.sast:bandit_to_report  needs_image_tools: [bandit]
+- name: pysa            kind: sast      enabled: false  note: one-day spike; drops to reference if it fails on > 25 % of repos   adapter: evals.calib.sast:pysa_to_report
+```
+Every baseline is graded by the **same** recall criterion (a finding = a reported location):
+**W-D owns `evals/calib/sast.py`** — pure adapters `sarif_to_report(sarif: dict, *, tool: str) -> dict`,
+`semgrep_to_report`, `bandit_to_report`, `pysa_to_report` producing `agents/report.schema.json`
+reports (`property` = "P4" for SSRF rule ids, findings with file/line/evidence = rule id, `claims = []`),
+fixture-tested on hand-written tool outputs. **W-C adds `SastAgent(BaseAgent)`** to
+`harbor_agent.py`: `--ak invocation=… --ak adapter=module:function --ak tool=…`; runs the invocation
+via `environment.exec`, downloads the output file, resolves the adapter by dotted path (lazy import),
+uploads `/logs/artifacts/report.json`, writes a minimal ATIF trajectory. **W-B adds an optional
+`sast_tools: Sequence[str] = ()` parameter** to `image_recipe`/`dockerfile`: when non-empty, a
+separate venv `/opt/sast` gets semgrep and/or bandit (with `p/python` rules pre-fetched at build),
+and codeql's CLI + Python pack are downloaded at build into `/opt/codeql`; default builds install
+none (Phase 1 step 3 builds are tool-free; `calib-build --with-sast` is W-D's flag). Licensing
+guardrails for this public repo: never vendor semgrep-rules; never redistribute the CodeQL CLI;
+ship only our own rules and any Pysa models we write. The card states the limitation: no stable,
+permissively licensed, cross-file Python taint engine with a stock SSRF rule exists.
+Reproducibility: Harbor pins no agent versions — `harbor_argv` always passes `--ak version=<pin>`
+for installed baselines and the summary records `agent.version` from ATIF / `AgentInfo`.
+**Condition asymmetry, recorded per run in `summary.provenance`:** installed baselines need the
+model key inside the container and `allowlist` networking to the model API; our external agent and
+the SAST tools run `no-network`.
+Our agent keeps our existing Anthropic loop (priced from `prices.yaml`); Terminus-2 is the structural
+template only. Wrapping `harbor.llms.lite_llm.LiteLLM` is **not** adopted in Phase 1 (internal API, a
+second pricing path); revisit after the Haiku smoke.
+Once docker is up, `harbor run -d terminal-bench-sample@2.0 -a <baseline>` is the one-command smoke
+of runner + baselines (W-D documents it in `runner.py`'s docstring; nobody runs it now).
+
+### A5. Image recipe and backends (W-B, W-D)
+
+- Base image: official `python:<minor>-slim` of the commit's era (3.11–3.16 are built; EOL tags such
+  as `3.8-slim` stay pullable but frozen, with archived Debian apt mirrors) — prefer `uv` for every
+  install and avoid `apt` where possible (git is the one apt package; fall back to a `uv`-free
+  `git` only if the slim tag lacks it). `uv python install` covers 3.11+ only, so pre-3.11 commits
+  rely on the frozen slim tags; `python_requires` picks the newest minor the project allowed at the commit.
+- Dependency resolution: `uv pip install --system --exclude-newer=<FIX-COMMIT DATE>` on **every**
+  install step (PEP 700 upload-time cutoff, all of PyPI). **The cutoff is the fix-commit's author date,
+  not the advisory's publication date** — `image_recipe(repo, commit, cutoff_date)` takes it from
+  `git log -1 --format=%cI <fix_commit>`; the task metadata records both `disclosure_date` (for
+  contamination bins) and `dependency_cutoff` (new metadata key, W-B). Prior art to read before
+  writing auto-detection: SWE-smith's install-recipe discovery; ARVO's paired vul/fix images with the
+  PoC in the verifier is exactly our task shape.
+- Backends (W-D `calib-run --env`): local `docker` (colima; the only local path with Harbor's full
+  network-policy set), hosted `modal` as the default remote (recurring $30/month free credit ≈ 79
+  sandbox-hours at 2 CPU / 4 GiB), `daytona` burst-only (one-time $200 credit; OSS repo archived
+  2026-06). Apple `container` rejected (no network-policy support in Harbor). **Budget:** model calls
+  remain the whole $200/month; sandbox time is $0 within those credits; `calib-run` records the
+  backend in provenance.
+
+### A6. Governor bookkeeping
+
+`evals/calib/__init__.py` gained `REWARDKIT_VERSION`, `REWARDKIT_VENV`, `REWARD_DIMENSIONS`,
+`REWARD_KEYS`, `REWARD_DETAILS_JSON`, `REWARD_CRITERIA`, `AGENT_DIFF_FILE`, `HIDDEN_CONFLICT_MARKER`;
+`Task` gained `review_underspecified`, `review_test_unfair`; `pyproject.toml` `calib` extra pins
+`harbor-rewardkit==0.2.4`. The ownership table above is amended by A1 (`verifier_assets/` → W-C),
+A4 (`sast.py` → W-D; `SastAgent` → W-C; `sast_tools` option → W-B). W-A's `ingest.py` gains
+`OSVZipSource` and the GitHub-API PR resolution (A3). All survey holds are lifted.

@@ -85,8 +85,26 @@ EXCLUSION_REASONS = (
     "other",                  # must come with a note
 )
 
-#: Reward keys the verifier writes to reward.json (all numeric; Harbor requires that).
-REWARD_KEYS = ("reward", "recall", "fix", "claim_fidelity", "scope_safety",
-               "fp", "hidden_patch_conflict", "is_negative", "noop_rc", "fix_rc", "suite_rc")
+#: The verifier is a Harbor RewardKit tree (amendment 2026-11-27): one subdirectory of
+#: tests/ per reward dimension, a root reward.toml with `aggregation = "all-pass"` producing
+#: `reward`. reward.json therefore has exactly these keys (all numeric; Harbor requires that);
+#: per-criterion scores and rc values live in reward-details.json.
+REWARDKIT_VERSION = "0.2.4"                      # harbor-rewardkit on PyPI, 2026-11-01, Python >= 3.12
+REWARDKIT_VENV = "/opt/rewardkit"                # baked into the image: the verifier runs no-network, uvx cannot fetch
+REWARD_DIMENSIONS = ("recall", "fix", "claim_fidelity", "scope_safety", "fp")
+REWARD_KEYS = ("reward",) + REWARD_DIMENSIONS
+REWARD_DETAILS_JSON = f"{LOGS_VERIFIER}/reward-details.json"
+#: Criterion names inside each dimension (the validity gate reads them from reward-details.json).
+REWARD_CRITERIA = {
+    "recall": ("finding_in_fix_hunk",),          # or oracle == fix test; 1.0 "not-applicable" on negatives
+    "fix": ("hidden_test_passes", "suite_passes"),   # reasoning carries "rc=<n>"; nop run: hidden 0 (rc=1), suite 1
+    "claim_fidelity": ("claims_verified",),
+    "scope_safety": ("diff_in_scope",),          # scope_files ∪ tests/, test/; no secret shapes; negatives: tests only
+    "fp": ("no_class_finding",),                 # negatives: 1.0 iff no finding on fp_files; 1.0 "not-applicable" on positives
+}
+#: Pre-criteria step in tests/test.sh (before rewardkit runs): the agent's diff is captured to
+#: /logs/verifier/agent.diff, then tests/hidden.patch is applied; a conflict writes this marker.
+AGENT_DIFF_FILE = f"{LOGS_VERIFIER}/agent.diff"
+HIDDEN_CONFLICT_MARKER = f"{LOGS_VERIFIER}/hidden_patch_conflict"
 
 __all__ = [n for n in dir() if n.isupper()]

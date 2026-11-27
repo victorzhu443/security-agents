@@ -133,6 +133,10 @@ class Task:
     scope_rule: str = SCOPE_SINGLE_FILE         # single-file | reachable-from-fix
     contamination: Dict[str, str] = field(default_factory=dict)   # model id -> pre | post | unknown
     task_dir: str = ""                          # Harbor task directory, relative to the toolkit repo (calib tasks)
+    # SWE-bench-Verified-style human review at co-selection (0 = fine … 3 = unusable; -1 = unscored).
+    # A task is dropped at >= 2 on either axis (CONTRACTS.md "Amendments").
+    review_underspecified: int = -1             # is the task (instruction + repo) underspecified?
+    review_test_unfair: int = -1                # is the hidden test unfair / too narrow for a valid fix?
 
     def to_record(self) -> Dict[str, Any]:
         return dataclasses.asdict(self)

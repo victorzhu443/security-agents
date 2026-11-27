@@ -21,7 +21,7 @@ agent = ["anthropic==1.5.0"]
 # calibration pipeline (evals/calib): Harbor runs the advisory tasks (sandbox, verifier,
 # trajectories). Pinned release verified on PyPI 2026-11-27 (0.27.0, 2026-11-21); needs
 # Python >= 3.12. Unit tests never import it.
-calib = ["harbor==0.27.0"]
+calib = ["harbor==0.27.0", "harbor-rewardkit==0.2.4"]
 
 [tool.setuptools]
 packages = ["promptinject", "promptinject.corpus", "fuzzing", "secprim", "evals", "evals.agent", "evals.calib"]

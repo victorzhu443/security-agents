@@ -21,7 +21,7 @@ PHASE7_KEYS = {"task_id", "eval_id", "repo", "repo_url", "commit", "property", "
 ADVISORY_KEYS = {"kind", "is_negative", "advisory_id", "cwe", "project", "vuln_commit", "fix_commit",
                  "fix_files", "scope_files", "hidden_patch", "fix_test", "fp_files", "sub_scenario",
                  "library", "disclosure_date", "split", "anchor", "oracle2", "scope_rule",
-                 "contamination", "task_dir"}
+                 "contamination", "task_dir", "review_underspecified", "review_test_unfair"}
 
 
 def _mutation_task() -> Task:
@@ -39,6 +39,7 @@ def test_mutation_record_only_gains_default_keys():
     assert rec["kind"] == types.KIND_MUTATION and rec["scope_rule"] == types.SCOPE_SINGLE_FILE
     assert rec["is_negative"] is False and rec["split"] == "" and rec["fix_files"] == []
     assert rec["contamination"] == {} and rec["source"] == types.SOURCE_REAL_CODEBASE
+    assert rec["review_underspecified"] == -1 and rec["review_test_unfair"] == -1
     assert Task(**rec) == _mutation_task()          # round-trips with the defaults
 
 
@@ -93,3 +94,10 @@ def test_pyproject_lists_calib_package_and_extra():
     text = (calib.REPO / "pyproject.toml").read_text()
     assert '"evals.calib"' in text
     assert f'harbor=={calib.HARBOR_VERSION}' in text
+    assert f'harbor-rewardkit=={calib.REWARDKIT_VERSION}' in text
+
+
+def test_reward_dimensions_are_the_rewardkit_tree():
+    assert calib.REWARD_DIMENSIONS == ("recall", "fix", "claim_fidelity", "scope_safety", "fp")
+    assert "reward" in calib.REWARD_KEYS and set(calib.REWARD_DIMENSIONS) <= set(calib.REWARD_KEYS)
+    assert calib.REWARD_DETAILS_JSON == "/logs/verifier/reward-details.json"
