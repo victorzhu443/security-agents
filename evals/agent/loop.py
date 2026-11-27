@@ -618,14 +618,20 @@ def _stream_turn(client, *, model: str, system: str, tools: List[dict], messages
 
 def run_trial(task: Task, env: Env, *, model: str, budget_usd: float, agent_body: str,
               client=None, max_tool_calls: int = MAX_TOOL_CALLS, max_tokens: int = MAX_TOTAL_TOKENS,
-              seed: Optional[int] = None, log: Optional[Callable[[str], None]] = None) -> LoopResult:
-    """Run one trial. Never grades. `seed` is recorded by the runner only (the API has no seed)."""
+              seed: Optional[int] = None, log: Optional[Callable[[str], None]] = None,
+              user_prompt_text: Optional[str] = None, system_text: Optional[str] = None) -> LoopResult:
+    """Run one trial. Never grades. `seed` is recorded by the runner only (the API has no seed).
+
+    `user_prompt_text` / `system_text` (evals/calib prompt conditions) replace
+    `user_prompt(task, env)` / `agent_body` when given; everything else is unchanged."""
     if not model:
         raise ValueError("run_trial: `model` is required (no default model spends money)")
     prices = load_prices()
     _price_row(model, prices)                 # fail before the first request on an unpriced model
     if client is None:
         client = _client()
+    system = system_text if system_text is not None else agent_body
+    first_user = user_prompt_text if user_prompt_text is not None else user_prompt(task, env)
 
     def say(msg: str) -> None:
         if log is not None:
@@ -635,7 +641,7 @@ def run_trial(task: Task, env: Env, *, model: str, budget_usd: float, agent_body
     tools = tool_definitions()
     executor = _Tools(task, env)
     guard = BudgetGuard(max_tool_calls, max_tokens, max_usd=budget_usd)
-    messages: List[dict] = [{"role": "user", "content": user_prompt(task, env)}]
+    messages: List[dict] = [{"role": "user", "content": first_user}]
     usage_total = Usage()
     cost_total = 0.0
     denials: List[DenialEvent] = []
@@ -655,7 +661,7 @@ def run_trial(task: Task, env: Env, *, model: str, budget_usd: float, agent_body
     while True:
         turn += 1
         try:
-            response = _stream_turn(client, model=model, system=agent_body, tools=tools, messages=messages)
+            response = _stream_turn(client, model=model, system=system, tools=tools, messages=messages)
         except ValueError:
             # Unparseable tool JSON from the stream: no tool_use_id to answer, re-issue the turn.
             json_retries += 1
