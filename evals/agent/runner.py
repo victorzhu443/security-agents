@@ -259,8 +259,14 @@ _FRONT_MATTER = re.compile(r"\A---\s*\n.*?\n---\s*\n", re.S)
 
 
 def agent_body(path: Path) -> str:
-    """The agents/<name>.md body with its YAML front matter stripped."""
-    return _FRONT_MATTER.sub("", path.read_text(), count=1).lstrip("\n")
+    """The agents/<name>.md body with its YAML front matter stripped. Delegates to
+    `evals.agent.prompts.agent_body` (W-C, which also strips the leaking sections) when that
+    module exists; falls back to the plain front-matter strip on a checkout without it."""
+    try:
+        from .prompts import agent_body as _ab   # lazy: W-C's module may not be merged yet
+    except ImportError:
+        return _FRONT_MATTER.sub("", path.read_text(), count=1).lstrip("\n")
+    return _ab(path)
 
 
 def _provenance(task: Task, info, *, mode: str, model: str) -> Provenance:
